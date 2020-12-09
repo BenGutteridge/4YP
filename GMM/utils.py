@@ -13,6 +13,8 @@ from scipy.stats import wishart # need to replace with own version
 from autograd.numpy.random import multivariate_normal
 from autograd.scipy.stats import multivariate_normal as norm
 from autograd.numpy.linalg import inv, det
+import matplotlib.pyplot as plt
+from autograd import grad
 
 
 #%%  Variational distribution q() components - EVALUATION
@@ -40,7 +42,7 @@ def q_Z(Z,x,pi,mu,lam):
     K = pi.shape[0]
     for n in range(N):
         for k in range(K):
-            qZ *= responsibility(x,k,pi,mu,lam)**Z[k]
+            qZ = qZ * responsibility(x,k,pi,mu,lam)**Z[k]
     return qZ
 
 
@@ -57,13 +59,27 @@ def sample_lambda(W, nu):
 
 # Gaussian with ancestral sampling from precicion (from Wishart)
 def sample_mu(m, beta, lam):
-    return multivariate_normal(m, (beta*lam)**(-1))
+    return multivariate_normal(m, inv(beta*lam))
 
 # Sample Z = zk with probability = r_nk, the responsibility
 def sample_Z(r_nk):
     # r_nk is p(z_nk=1|x), i.e. posterior, so r_nk sums to 1 over K
     # hence multinomial
     return np.random.multinomial(1, r_nk)      
+
+def samples(alpha, beta, W, m, nu, x, K):
+    mu, lam = [],[]
+    pi = sample_pi(alpha)
+    for k in range(K):
+        lam.append(sample_lambda(W[k], nu))
+        mu.append(sample_mu(m[k], beta[k], lam[k]))
+    
+    # Need to calculate responsibility of each mixture component to sample Z
+    r_nk = np.empty(K)
+    for k in range(K):
+        r_nk[k] = responsibility(x,k,pi,mu,lam)
+    Z = sample_Z(r_nk)
+    return Z, pi, mu, lam, r_nk
 
 
 #%% p() component - EVALUATION
@@ -103,6 +119,9 @@ def f_wishart(lam, W, nu):
     return num/den
 
 
+#%% Major steps
+
+
 #%% Misc
 
 # r_nk = rho_nk/SUM_j(rho_nj)
@@ -112,7 +131,7 @@ def responsibility(x, k, pi, mu, lam):
     num = pi[k]*norm.pdf(x,mu[k],inv(lam[k]))
     den = 0
     for j in range(K):
-        den += pi[j]*norm.pdf(x,mu[j],inv(lam[j]))
+        den = den + pi[j]*norm.pdf(x,mu[j],inv(lam[j]))
     return num/den
 
 # BXL nice plot colours
@@ -124,21 +143,17 @@ cols = [\
         '#6e8dd7',
         ]
 
-# Plots ellipses over 2D Gaussians
-def draw_ellipse(mu,cov,col=None):
+# Returns plottable coordinates for ellipses over 2D Gaussians
+def draw_ellipse(mu,cov):
     # as I understand it - 
         # diagonalise the cov matrix
         # use eigenvalues for radii
         # use eigenvector rotation from x axis for rotation
     x=mu[0]       #x-position of the center
     y=mu[1]      #y-position of the center
-    lam, V = np.linalg.eig(cov)
+    lam, V = np.linalg.eig(cov) # eigenvalues and vectors
     t_rot = np.arctan(V[1,0]/V[0,0])
-    a, b = lam[0], lam[1]
-    # a=cov[0,0]       #radius on the x-axis
-    # b=cov[1,1]      #radius on the y-axis
-    # t_rot=cov[1,0] #rotation angle
-    
+    a, b = lam[0], lam[1]    
     t = np.linspace(0, 2*np.pi, 100)
     Ell = np.array([a*np.cos(t) , b*np.sin(t)])  
          #u,v removed to keep the same center location
@@ -148,5 +163,26 @@ def draw_ellipse(mu,cov,col=None):
     Ell_rot = np.zeros((2,Ell.shape[1]))
     for i in range(Ell.shape[1]):
         Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
-    # plt.plot(x+Ell_rot[0,:] , y+Ell_rot[1,:], col)
     return x+Ell_rot[0,:] , y+Ell_rot[1,:]
+
+def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
+    plt.figure()
+    plt.plot(X[:,0], X[:,1], 'kx', alpha=0.2)
+    
+    legend = ['Datapoints']
+    
+    for k in range(K):
+        x_ell, y_ell = draw_ellipse(mu[k], lam[k])
+        plt.plot(x_ell, y_ell, cols[k], alpha=pi[k])
+        legend.append('k=%d, pi=%.2f'%(k,pi[k]))
+        # for whatever reason lots of the ellipses are very long and narrow, why?
+        
+    # Plotting the ellipses for the GMM that generated the data
+    for i in range(2):
+        x_true_ell, y_true_ell = draw_ellipse(centres[i], covs[i])
+        plt.plot(x_true_ell, y_true_ell, 'g--')
+    
+    legend.append('Data generation GMM')
+    plt.legend(legend)
+    plt.title(title)
+    plt.show()
