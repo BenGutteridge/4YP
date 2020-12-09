@@ -8,11 +8,11 @@ Created on Fri Dec  4 13:37:16 2020
 """
 import autograd.numpy as np
 from autograd.numpy import sin, cos
-from autograd.scipy.special import gamma
+from autograd.scipy.special import gamma, multigammaln
 from scipy.stats import wishart # need to replace with own version
 from autograd.numpy.random import multivariate_normal
 from autograd.scipy.stats import multivariate_normal as norm
-from autograd.numpy.linalg import inv
+from autograd.numpy.linalg import inv, det
 
 
 #%%  Variational distribution q() components - EVALUATION
@@ -27,7 +27,7 @@ def q_lambda(lam, nu, W):
     # Wishart distribution:
     # "The Wishart distribution arises as the distribution of the sample 
     # covariance matrix for a sample from a multivariate normal distribution."
-    return wishart.pdf(lam, nu, W)
+    return f_wishart(lam, W, nu)
 
 # q(mu|beta, m, Lambda)
 def q_mu(mu, m, beta, lam):
@@ -96,8 +96,11 @@ def f_dirichlet(pi,alpha):
     return (1/B)*np.prod(pi**(alpha-1.))
 
 # Wishart
-# def f_wishart():
-    ### DO IT
+def f_wishart(lam, W, nu):
+    d = 2   # dimensionality
+    num = (det(lam)**((nu-d-1)/2))*np.exp(-np.trace(np.dot(inv(W),lam))/2)
+    den = (2**(nu*d/2))*(det(W)**(nu/2))*multigammaln(nu/2,d)
+    return num/den
 
 
 #%% Misc

@@ -62,7 +62,7 @@ alpha = np.ones(K)
 # Wishart distribution over precision parameters -- scale and DoF: W and nu
 # Gaussian distribution over mu parameters -- inv(beta*lambda) & m
 beta = np.ones(K)   #  not sure about this
-nu = 2     # degrees of freedom
+nu = 2.     # degrees of freedom
 """'The least informative, proper Wishart prior is obtained by setting 
 nu = dimensionality', from Wikipedia"""
 W0 = np.eye(2)/nu  # 'interpreted as a precision matrix'
