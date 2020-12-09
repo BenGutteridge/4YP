@@ -33,7 +33,7 @@ centres = [np.array([0.,3.]), np.array([2.,0.])]
 covs = [np.eye(2), np.array([[0.6,0.4],
                              [0.4,0.6]])]
 
-N_total = 10  # total number of datapoints wanted
+N_total = 1000  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -175,7 +175,7 @@ def update(alpha, beta, W, m, d_alpha, d_beta, d_W, d_m, n):
         print("\n\nLOSS (ELBO) = %.3f" % L)
     return alpha, beta, W, m, L
 
-n_its = N_total
+n_its = 10
 ELBO = np.zeros(n_its)
 for j in range(n_its):
     alpha, beta, W, m, ELBO[j] = update(alpha, beta, W, m, d_alpha, 
