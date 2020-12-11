@@ -96,8 +96,8 @@ def p_Z_given_pi(Z, pi):
     return np.sum(np.multiply(pi,Z))
 
 # as far as I can tell these are all the same as the corresponding q()
-def p_pi(pi, alpha):
-    return q_pi(pi, alpha)
+def p_pi(pi, alpha0):
+    return q_pi(pi, alpha0)
 def p_lambda(lam, nu, W):
     return q_lambda(lam, nu, W)
 def p_mu_given_lambda(mu, m, beta, lam):

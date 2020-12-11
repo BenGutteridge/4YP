@@ -52,26 +52,33 @@ K = 5
 
 #%% 2. Sample q(Z,pi,mu,lambda) for all of the latent variables
 
-### Initialise parameters of prior distributions of q
+### Initialise parameters of prior distributions of p (alpha0, beta0, m0, W0)
 
 # Dirichlet distribution over pi parameter -- alpha
-alpha = np.ones(K) 
 # "by symmetry we have chosen the same factor for each of the components"
 # "if alpha0 is small ... influenced primarily by data rather than priors"
+alpha0 = np.ones(K)*0.1 # constant alpha fpr p(pi)
 
 # Wishart distribution over precision parameters -- scale and DoF: W and nu
 # Gaussian distribution over mu parameters -- inv(beta*lambda) & m
-beta = np.ones(K)*10   #  not sure about this
+beta0 = np.ones(K)*5   #  not sure about this
 nu = 2.     # degrees of freedom
 """'The least informative, proper Wishart prior is obtained by setting 
 nu = dimensionality', from Wikipedia"""
-W0 = np.eye(2)/nu  # 'interpreted as a precision matrix'
-m0 = np.zeros(2)  # "typically we would choose m0=0 by symmetry"
-W, m = [], []
+W_ = np.eye(2)/nu  # 'interpreted as a precision matrix'
+m_ = np.zeros(2)  # "typically we would choose m0=0 by symmetry"
+W0, m0 = [], []
 for k in range(K):  # mean and precision needed for each mixture component
-    m.append(m0)
-    W.append(W0)
+    m0.append(m_)
+    W0.append(W_)
 "a reasonable choice for V would be a prior guess for the precision / n"
+
+# Now intiialising the parameters of q (alpha, beta, m, W)
+# chosen arbitrarily ? (can we improve on these?)
+alpha = np.ones(K)
+beta = np.ones(K)*10
+m = [m0[k] + 1. for k in range(K)]
+W = [W0[k] + np.eye(2) for k in range(K)]
 
 
 # Sample the model hyperparameters
@@ -99,10 +106,10 @@ def calculate_ELBO(x,Z,pi,mu,lam,alpha,beta,W,m,nu,K,N):
     
     Elogp = p_X_given_Z_mu_lambda(x,Z,mu,lam)*\
                 p_Z_given_pi(Z, pi)*\
-                    p_pi(pi, alpha)
+                    p_pi(pi, alpha0)
     for k in range(K):
-        Elogp = Elogp * p_mu_given_lambda(mu[k], m[k], beta[k], lam[k])*\
-                p_lambda(lam[k], nu, W[k])
+        Elogp = Elogp * p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k])*\
+                p_lambda(lam[k], nu, W0[k])
     Elogp = np.log(Elogp)
     
     
@@ -162,6 +169,10 @@ def update(alpha, beta, W, m, d_alpha, d_beta, d_W, d_m, n):
         alpha[i] = alpha[i] + step_alpha*d_alpha[i]
         beta[i] = beta[i] + step_beta*d_beta[i]
         m[i] = m[i] + step_m*d_m[i]
+    
+    # alpha > 0, so set all -ve alpha to zero
+    alpha = (alpha>0)*alpha
+    alpha = alpha + (alpha==0)*1e-16 # Making sure alpha saturates but is > 0
 
     # New datapoint (should they be sampled at random? (without replacement))
     # n += 1
@@ -175,7 +186,7 @@ def update(alpha, beta, W, m, d_alpha, d_beta, d_W, d_m, n):
         print("\n\nLOSS (ELBO) = %.3f" % L)
     return alpha, beta, W, m, L
 
-n_its = 10
+n_its = N_total
 ELBO = np.zeros(n_its)
 for j in range(n_its):
     alpha, beta, W, m, ELBO[j] = update(alpha, beta, W, m, d_alpha, 
@@ -195,6 +206,9 @@ TO DO:
     - implement SGD
     - plot it
     - Test against batch GD
+    
+    - Too many function inputs - dict?
+    - Sort out global variables for alpha0, etc
 """
 
 
