@@ -70,9 +70,13 @@ def sample_Z(r_nk):
 def samples(alpha, beta, W, m, nu, x, K):
     mu, lam = [],[]
     pi = sample_pi(alpha)
-    for k in range(K):
-        lam.append(sample_lambda(W[k], nu))
-        mu.append(sample_mu(m[k], beta[k], lam[k]))
+    try:
+        for k in range(K):
+            lam.append(sample_lambda(W[k], nu))
+            mu.append(sample_mu(m[k], beta[k], lam[k]))
+    except:
+        raise Exception('\n\n***ERROR***\n\nEither p or q has gone to zero, causing Elogp or Elogq to go to -Inf\n')
+        
     
     # Need to calculate responsibility of each mixture component to sample Z
     r_nk = np.empty(K)
@@ -96,8 +100,8 @@ def p_Z_given_pi(Z, pi):
     return np.sum(np.multiply(pi,Z))
 
 # as far as I can tell these are all the same as the corresponding q()
-def p_pi(pi, alpha0):
-    return q_pi(pi, alpha0)
+def p_pi(pi, alpha):
+    return q_pi(pi, alpha)
 def p_lambda(lam, nu, W):
     return q_lambda(lam, nu, W)
 def p_mu_given_lambda(mu, m, beta, lam):
@@ -118,8 +122,52 @@ def f_wishart(lam, W, nu):
     den = (2**(nu*d/2))*(det(W)**(nu/2))*multigammaln(nu/2,d)
     return num/den
 
-
 #%% Major steps
+
+def calculate_ELBO(x, Z, 
+                   pi, mu, lam,
+                   a, beta, m, V, nu,
+                   p_dist_params,
+                   K, N):
+    # pi, mu, lam = model_params['pi'], model_params['mu'], model_params['lam']
+    
+    alpha0, beta0, W0, m0, nu0= \
+    p_dist_params['alpha'], p_dist_params['beta'], p_dist_params['W'],\
+        p_dist_params['m'], p_dist_params['nu'],
+    
+    alpha = a**2
+    W = [np.dot(V[k].T, V[k]) for k in range(K)]
+
+    # 4.1. log p(X,Z,pi,mu,lambda) = 
+    #   log[ p(X|Z,mu,lambda).p(Z|pi).p(pi).p(mu|lambda).p(lambda) ]
+
+    Elogp = p_X_given_Z_mu_lambda(x,Z,mu,lam)*\
+                p_Z_given_pi(Z, pi)*\
+                    p_pi(pi, alpha0)
+    for k in range(K):
+        Elogp = Elogp * p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k])*\
+                p_lambda(lam[k], nu0, W0[k])
+    if np.abs(np.log(Elogp))>1e10 or not np.log(Elogp)==np.log(Elogp):
+        print('Elogp: ', Elogp)
+    print('\nE[p]: ', Elogp)
+    Elogp = np.log(Elogp)
+    print('Elogp: ', Elogp)
+    
+    # 4.2. log q(Z,pi,mu,lambda) = 
+    #   log[ q(Z).q(pi).PROD_K[ q(mu|lambda).p(lambda) ] ]
+        
+    Elogq = q_Z(Z,x,pi,mu,lam)*q_pi(pi,alpha)
+    for k in range(K):
+        Elogq = Elogq * q_mu(mu[k], m[k], beta[k], lam[k])*\
+                q_lambda(lam[k], nu, W[k])
+    print('E[q]: ', Elogq)
+    Elogq = np.log(Elogq)
+    print('Elogq: ', Elogq)
+    
+    
+    L = Elogp - Elogq
+    # print("Loss (ELBO) = %.3f" % L)
+    return L
 
 
 #%% Misc
@@ -186,3 +234,14 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
     plt.legend(legend)
     plt.title(title)
     plt.show()
+    
+import os, sys
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
