@@ -36,7 +36,7 @@ def q_mu(mu, m, beta, lam):
     return norm.pdf(mu, m, inv(beta*lam))
 
 # PROD_x[PROD_n[r_nk^{z_nk}]]
-def q_Z(Z,x,pi,mu,lam):
+def q_Z(Z,x,pi,mu,lam,N):
     qZ = 1
     N = 1   # single sample
     K = pi.shape[0]
@@ -72,7 +72,7 @@ def samples(alpha, beta, W, m, nu, x, K):
     pi = sample_pi(alpha)
     try:
         for k in range(K):
-            lam.append(sample_lambda(W[k], nu))
+            lam.append(sample_lambda(W[k], nu[k]))
             mu.append(sample_mu(m[k], beta[k], lam[k]))
     except:
         raise Exception('\n\n***ERROR***\n\nEither p or q has gone to zero, causing Elogp or Elogq to go to -Inf\n')
@@ -126,49 +126,58 @@ def f_wishart(lam, W, nu):
 
 def calculate_ELBO(x, Z, 
                    pi, mu, lam,
-                   a, beta, m, V, nu,
+                   a, b, m, V, u,
                    p_dist_params,
                    K, N):
     # pi, mu, lam = model_params['pi'], model_params['mu'], model_params['lam']
+    
+    errortxt1 = "Elogp\n0: p(X|Z,mu,lam)\n1: p(Z|pi)\n2: p(pi|alpha0)\n3,5,7,9,11: p(mu[k]|lam[k])\n4,6,8,10,12: p(lam|nu0,W0))"
+    errortxt2 = "Elogq\n0: q(Z|x,pi,mu,lam)\n1: q(pi|alpha)\n2,4,6,8,10: q(mu[k]|lam[k])\n3,5,7,9,11: q(lam|nu,W)"
     
     alpha0, beta0, W0, m0, nu0= \
     p_dist_params['alpha'], p_dist_params['beta'], p_dist_params['W'],\
         p_dist_params['m'], p_dist_params['nu'],
     
     alpha = a**2
+    beta = b**2
     W = [np.dot(V[k].T, V[k]) for k in range(K)]
+    nu = abs(u)+2     # nu > D+1 
 
     # 4.1. log p(X,Z,pi,mu,lambda) = 
     #   log[ p(X|Z,mu,lambda).p(Z|pi).p(pi).p(mu|lambda).p(lambda) ]
 
-    Elogp = p_X_given_Z_mu_lambda(x,Z,mu,lam)*\
-                p_Z_given_pi(Z, pi)*\
-                    p_pi(pi, alpha0)
+    Elogp = [p_X_given_Z_mu_lambda(x,Z,mu,lam), 
+             p_Z_given_pi(Z, pi), 
+             p_pi(pi, alpha0)]
     for k in range(K):
-        Elogp = Elogp * p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k])*\
-                p_lambda(lam[k], nu0, W0[k])
-    if np.abs(np.log(Elogp))>1e10 or not np.log(Elogp)==np.log(Elogp):
-        print('Elogp: ', Elogp)
-    print('\nE[p]: ', Elogp)
-    Elogp = np.log(Elogp)
-    print('Elogp: ', Elogp)
+        Elogp.append(p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k]))
+        Elogp.append(p_lambda(lam[k], nu0[k], W0[k]))
+    for term in range(len(Elogp)):
+        if Elogp[term]==0:
+            print('\n\nERROR\n%dth term in Elogp = 0\n'%term)
+            print(errortxt1)
+            sys.exit()
+    Elogp = np.sum(np.log(np.array(Elogp)))
+    # print('Elogp: ', Elogp)
     
     # 4.2. log q(Z,pi,mu,lambda) = 
     #   log[ q(Z).q(pi).PROD_K[ q(mu|lambda).p(lambda) ] ]
         
-    Elogq = q_Z(Z,x,pi,mu,lam)*q_pi(pi,alpha)
+    Elogq = [q_Z(Z,x,pi,mu,lam,N), q_pi(pi,alpha)]
     for k in range(K):
-        Elogq = Elogq * q_mu(mu[k], m[k], beta[k], lam[k])*\
-                q_lambda(lam[k], nu, W[k])
-    print('E[q]: ', Elogq)
-    Elogq = np.log(Elogq)
-    print('Elogq: ', Elogq)
-    
+        Elogq.append(q_mu(mu[k], m[k], beta[k], lam[k]))
+        Elogq.append(q_lambda(lam[k], nu[k], W[k]))
+    for term in range(len(Elogq)):
+        if Elogq[term]==0:
+            print('\n\nERROR\n%dth term in Elogq = 0\n'%term)
+            print(errortxt2)
+            sys.exit()
+    Elogq = np.sum(np.log(np.array(Elogq)))
+    # print('Elogq: ', Elogq)
     
     L = Elogp - Elogq
     # print("Loss (ELBO) = %.3f" % L)
     return L
-
 
 #%% Misc
 
@@ -220,7 +229,7 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
     legend = ['Datapoints']
     
     for k in range(K):
-        x_ell, y_ell = draw_ellipse(mu[k], lam[k])
+        x_ell, y_ell = draw_ellipse(mu[k], inv(lam[k]))
         plt.plot(x_ell, y_ell, cols[k], alpha=pi[k])
         legend.append('k=%d, pi=%.2f'%(k,pi[k]))
         # for whatever reason lots of the ellipses are very long and narrow, why?

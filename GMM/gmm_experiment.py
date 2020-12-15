@@ -15,18 +15,8 @@ from autograd import grad
 import matplotlib.pyplot as plt
 plt.close('all')
 
-# Evaluations of, and samples from, q() distributions
-from utils import sample_Z, sample_pi, sample_mu, sample_lambda, samples
-from utils import q_Z, q_pi, q_mu, q_lambda
-
-# Evaluations of p() distributions
-from utils import p_Z_given_pi, p_pi, p_mu_given_lambda, p_lambda
-from utils import p_X_given_Z_mu_lambda
-
 # Misc
-from utils import responsibility, draw_ellipse, plot_GMM, cols
-from utils import calculate_ELBO
-from utils import HiddenPrints
+from utils import samples, plot_GMM, calculate_ELBO, HiddenPrints
 
 #%% 1. Create a (2D) dataset and plot it
 
@@ -50,9 +40,11 @@ N = 1
 # How many mixture components do we want to start with
 # (should automatically reduce the contribution of unnecessary components to 0)
 K = 5
+# Number of  updates to perform
+n_its = 10
 
 
-#%% 2. Sample q(Z,pi,mu,lambda) for all of the latent variables
+#%% 2. Initialise parameters
 # Since we have constraints we use alternative parameters.
 # alpha = a**2          (alpha > 0)
 # W = np.dot(V.T, V)    (W positive definite)
@@ -67,11 +59,11 @@ a0 = np.ones(K)*(0.1**0.5) # constant alpha0 for p(pi)
 
 # Wishart distribution over precision parameters -- scale and DoF: W and nu
 # Gaussian distribution over mu parameters -- inv(beta*lambda) & m
-beta0 = np.ones(K)*5   #  not sure about this
-nu = 2.     # degrees of freedom
+b0 = np.ones(K)*1   #  not sure about this
+nu0 = np.ones(K)*2.     # degrees of freedom
 """'The least informative, proper Wishart prior is obtained by setting 
 nu = dimensionality', from Wikipedia"""
-V_ = np.eye(2)/nu  # 'interpreted as a precision matrix'
+V_ = np.eye(2)/2  # 'interpreted as a precision matrix'
 m_ = np.zeros(2)  # "typically we would choose m0=0 by symmetry"
 V0, m0 = [], []
 for k in range(K):  # mean and precision needed for each mixture component
@@ -79,12 +71,24 @@ for k in range(K):  # mean and precision needed for each mixture component
     V0.append(V_)
 "a reasonable choice for V would be a prior guess for the precision / n"
 
+alpha0 = a0**2
+beta0 = b0**2
+W0 = [np.dot(V0[k].T, V0[k]) for k in range(K)]
+p_dist_params = {\
+                 'alpha': alpha0,
+                 'beta': beta0,
+                 'm': m0,
+                 'W': W0,
+                 'nu': nu0,
+                 }
+
 # Now intiialising the parameters of q (alpha, beta, m, W)
 # chosen arbitrarily ? (can we improve on these?)
 a = np.ones(K)
-beta = np.ones(K)*10
+b = np.ones(K)*2
 m = [m0[k] + 1. for k in range(K)]
 V = [V0[k] + np.eye(2) for k in range(K)]
+u = np.ones(K)*1.1
 
 
 # Sample the model hyperparameters
@@ -93,139 +97,126 @@ x = X[n]
 
 # Transforming into parameters, thus imposing constraints
 alpha = a**2
+beta = b**2
 W = [np.dot(V[k].T, V[k]) for k in range(K)]
-
-alpha0 = a0**2
-W0 = [np.dot(V0[k].T, V0[k]) for k in range(K)]
-
-p_dist_params = {\
-                 'alpha': alpha0,
-                 'beta': beta0,
-                 'm': m0,
-                 'W': W0,
-                 'nu': nu,
-                 }
-# q_dist_params = {\
-#                  'alpha': alpha,
-#                  'beta': beta,
-#                  'm': m,
-#                  'W': W,
-#                  'nu': nu
-#                  }
-
-Z, pi, mu, lam, r_nk = samples(alpha, beta, W, m, nu, x, K)
-
-# model_params = {\
-#                 'pi': pi,
-#                 'mu': mu,
-#                 'lam': lam,
-#                 }
-
-# Display first sample of variables from q()
-print("\n***SAMPLES***\nmu = ", mu, 
-      "\nlams = ", lam, 
-      "\npi = ", pi, 
-      '\nr_nk = ', r_nk,
-      "\nZ = ", Z)
-
-# Plot the initialisation of the GMM from the first samples using ellipses
-title = 'Random initialisation of Gaussian mixture'
-plot_GMM(X, mu, lam, pi, centres, covs, K, title)
-    
-#%% 4. Calculate ELBO: plug samples from q into L = E[log p] + E[log q] 
-
-
-#%% 5. Implement autograd, find gradient of L wrt all parameters:
-    # alpha, beta, m and W
-    # assume nu remains the same here (need a better understanding of Wishart)
+nu = abs(u) + 2
 
 
 
-#%% 6. Update parameters by taking step, resample and repeat
 
-step = 0.01 # can't use the same step size for everything - but for now
 
-def update(x, Z, pi, mu, lam, a, beta, m, V, nu, p_dist_params, n, step, K, N):
+#%% 3. Sample model parameters, calculate ELBO, calculate gradients, update
+
+step = 0.1 # can't use the same step size for everything - but for now
+
+def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
+    # doesn't currently work
+    L = 0
+    for n in range(N):
+        print('Sample no.: ',n)
+        Z, pi, mu, lam, r_nk = sample_sets[n]
+        with HiddenPrints():
+            L = L + calculate_ELBO(X[n],Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+    return L
+
+def update(x, a, b, m, V, u, p_dist_params, n, step, K, N):
     print('\n***Iteration %d***'%n)
-    print('\nBefore update:')
-    L = calculate_ELBO(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
+    
+    # sample parameters
+    alpha = a**2
+    beta = b**2
+    W = [np.dot(V[k].T, V[k]) for k in range(K)]
+    nu = np.abs(u) + 2
+    Z, pi, mu, lam, r_nk = samples(alpha, beta, W, m, nu, x, K)
+    
+    # Calculate gradients and update steps
+    if N==1:    # single sample estimate
+        L = calculate_ELBO(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+        # Define gradient functions for each of the updated variables with autograd
+        Lgrad_a = grad(calculate_ELBO,5)
+        Lgrad_b = grad(calculate_ELBO,6)
+        Lgrad_m = grad(calculate_ELBO,7)
+        Lgrad_V = grad(calculate_ELBO,8)
+        Lgrad_u = grad(calculate_ELBO,9)
+        
+        with HiddenPrints(): # suppresses print statements in calculate_ELBO
+        # Find gradients wrt each variable - use in SGD update
+            d_a = Lgrad_a(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+            d_b = Lgrad_b(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+            d_m = Lgrad_m(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+            d_V = Lgrad_V(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+            d_u = Lgrad_u(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+            
+    else:    # batch/minibatch estimate - doesn't currently work
+        sample_sets = []
+        for i in range(N):
+            sample_set = samples(alpha, beta, W, m, nu, X[n], K)
+            sample_sets.append(sample_set)
+            
+        L = multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N)
+        Lgrad_a = grad(multi_sample_ELBO,2)
+        Lgrad_b = grad(multi_sample_ELBO,3)
+        Lgrad_m = grad(multi_sample_ELBO,4)
+        Lgrad_V = grad(multi_sample_ELBO,5)
+        Lgrad_u = grad(multi_sample_ELBO,6)
+        
+        with HiddenPrints(): # suppresses print statements in calculate_ELBO
+        # Find gradients wrt each variable - use in SGD update
+            d_a = Lgrad_a(X,sample_sets,a,b,m,V,nu,p_dist_params,K,N)
+            d_b = Lgrad_b(X,sample_sets,a,b,m,V,nu,p_dist_params,K,N)
+            d_m = Lgrad_m(X,sample_sets,a,b,m,V,nu,p_dist_params,K,N)
+            d_V = Lgrad_V(X,sample_sets,a,b,m,V,nu,p_dist_params,K,N)
+            d_u = Lgrad_u(X,sample_sets,a,b,m,V,nu,p_dist_params,K,N)
+            
+    # Display updates
     print("\nELBO: = %.3f" % L)
+    if n%2 == 0:
+        title = 'Update %d' % n
+        plot_GMM(X, mu, lam, pi, centres, covs, K, title) 
+    print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
+    print("\ndL/d_b = ", d_b)
+    print("\ndL/d_m = ", d_m)
+    print("\ndL/d_V = ", d_V)
+    print('\ndL/du = ', d_u)
     
-    # Define gradient functions for each of the updated variables with autograd
-    Lgrad_a = grad(calculate_ELBO,5)
-    Lgrad_beta = grad(calculate_ELBO,6)
-    Lgrad_m = grad(calculate_ELBO,7)
-    Lgrad_V = grad(calculate_ELBO,8)
-    
-    with HiddenPrints(): # suppresses print statements in calculate_ELBO
-    # Find gradients wrt each variable - use in SGD update
-        d_a = Lgrad_a(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
-        d_beta = Lgrad_beta(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
-        d_m = Lgrad_m(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
-        d_V = Lgrad_V(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
-
-    
-    # print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
-    # print("\ndL/d_beta = ", d_beta)
-    # print("\ndL/d_m = ", d_m)
-    # print("\ndL/d_V = ", d_V)
-    
-    # Update alpha, W, beta, m
-    step_V, step_a, step_beta, step_m = step, step, step, step
+    # Update alpha, W, beta, m, nu
+    step_V, step_a, step_b, step_m, step_u = step, step, step, step, step
     for i in range(len(V)):
         V[i] = V[i] + step_V*d_V[i]
         a[i] = a[i] + step_a*d_a[i]
-        beta[i] = beta[i] + step_beta*d_beta[i]
+        b[i] = b[i] + step_b*d_b[i]
         m[i] = m[i] + step_m*d_m[i]
-    
+        u[i] = u[i] + step_u*d_u[i]
+    return a, b, V, m, u, L
 
-    # New datapoint (should they be sampled at random? (without replacement))
-    # n += 1
-    x = X[n]
-        
-    alpha = a**2
-    W = [np.dot(V[k].T, V[k]) for k in range(K)]
-    Z, pi, mu, lam, r_nk = samples(alpha, beta, W, m, nu, x, K)
-
-    # print("\n***SAMPLES***\nmu = ", mu, 
-    #       "\nlams = ", lam, 
-    #       "\npi = ", pi, 
-    #       '\nr_nk = ', r_nk,
-    #       "\nZ = ", Z)
-    print('\nAfter update:')
-    L = calculate_ELBO(x,Z,pi,mu,lam,a,beta,m,V,nu,p_dist_params,K,N)
-    print("\nELBO: = %.3f" % L)
-    if n%200 == 0:
-        title = 'Update %d' % (n+1)
-        plot_GMM(X, mu, lam, pi, centres, covs, K, title)
-        print("\n\nLOSS (ELBO) = %.3f" % L)
-    return alpha, beta, W, m, L
-
-n_its = N_total
+# collect parameters for printing
 ELBO = np.zeros(n_its)
+betas = np.zeros((K,n_its))
+ms = np.zeros((2,K,n_its))
+nus = np.zeros((K,n_its))
 for j in range(n_its):
-    alpha, beta, W, m, ELBO[j] = update(x, Z, pi, mu, lam,
-                                        a, beta, m, V, nu,
+    a, b, V, m, u, ELBO[j] = update(X[j], a, b, m, V, u,
                                         p_dist_params,
                                         j, step, K, N)
+    betas[:,j] = np.array(b**2).T
+    nus[:,j] = np.array(abs(u)+2).T
+    ms[:,:,j] = np.array(m).T
+
+
 plt.figure()
 plt.plot(ELBO)
 plt.xlabel('Iterations')
 plt.title('ELBO')
 
-"""
-TO DO:
-    - fix autograd issues and get grad_L
-        - Write your own versions of np functions that aren't in autograd
-            - wishart DONE (but might be wrong)
-            - using lists for each of the K
-        - Figure out what happens with arrays
-    - implement SGD
-    - plot it
-    - Test against batch GD
-    
-    - Too many function inputs - dict?
-    - Sort out global variables for alpha0, etc
-"""
+plt.figure()
+plt.plot(betas.T)
+plt.title('Betas')
 
+plt.figure()
+plt.plot(nus.T)
+plt.title('Nus')
+
+plt.figure()
+plt.plot(ms[0,:,:],ms[1,:,:])
+plt.title('movement of m, mean parameter of NW')
 
