@@ -116,10 +116,10 @@ def f_dirichlet(pi,alpha):
     return (1/B)*np.prod(pi**(alpha-1.))
 
 # Wishart
-def f_wishart(lam, W, nu):
-    d = 2   # dimensionality
+def f_wishart(lam, W, nu, d=2):
+    # default dimensionality = 2
     num = (det(lam)**((nu-d-1)/2))*np.exp(-np.trace(np.dot(inv(W),lam))/2)
-    den = (2**(nu*d/2))*(det(W)**(nu/2))*multigammaln(nu/2,d)
+    den = (2**(nu*d/2))*(det(W)**(nu/2))*np.exp(multigammaln(nu/2,d))
     return num/den
 
 #%% Major steps
@@ -229,9 +229,10 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
     legend = ['Datapoints']
     
     for k in range(K):
-        x_ell, y_ell = draw_ellipse(mu[k], inv(lam[k]))
+        cov = inv(lam[k])
+        x_ell, y_ell = draw_ellipse(mu[k], cov)
         plt.plot(x_ell, y_ell, cols[k], alpha=pi[k])
-        legend.append('k=%d, pi=%.2f'%(k,pi[k]))
+        legend.append('pi=%.2f, var1=%.2f, var2=%.2f, cov=%.2f'%(pi[k],cov[0,0],cov[1,1],cov[1,0]))
         # for whatever reason lots of the ellipses are very long and narrow, why?
         
     # Plotting the ellipses for the GMM that generated the data
@@ -239,7 +240,8 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
         x_true_ell, y_true_ell = draw_ellipse(centres[i], covs[i])
         plt.plot(x_true_ell, y_true_ell, 'g--')
     
-    legend.append('Data generation GMM')
+    legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
+    legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
     plt.legend(legend)
     plt.title(title)
     plt.show()

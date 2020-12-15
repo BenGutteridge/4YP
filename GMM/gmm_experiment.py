@@ -33,7 +33,6 @@ X2 = multivariate_normal(mean=centres[1],
                          cov=covs[1],
                          size=int(N_total/2))
 X = np.concatenate((X1,X2))
-# GMM has true distribution of 0.5(N(30,5) + N(70,3))
 
 # Number of samples for estimates
 N = 1
@@ -107,7 +106,7 @@ nu = abs(u) + 2
 
 #%% 3. Sample model parameters, calculate ELBO, calculate gradients, update
 
-step = 0.1 # can't use the same step size for everything - but for now
+step = 0.01 # can't use the same step size for everything - but for now
 
 def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
     # doesn't currently work
@@ -170,7 +169,7 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N):
             
     # Display updates
     print("\nELBO: = %.3f" % L)
-    if n%2 == 0:
+    if n%1 == 0:
         title = 'Update %d' % n
         plot_GMM(X, mu, lam, pi, centres, covs, K, title) 
     print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
