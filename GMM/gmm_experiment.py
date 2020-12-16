@@ -18,7 +18,7 @@ import pickle
 plt.close('all')
 
 # Misc
-from utils import samples, plot_GMM, calculate_ELBO, HiddenPrints
+from utils import samples, plot_GMM, calculate_ELBO, HiddenPrints, cols
 
 #%% 1. Create a (2D) dataset and plot it
 
@@ -27,7 +27,7 @@ centres = [np.array([0.,3.]), np.array([2.,0.])]
 covs = [np.eye(2), np.array([[0.6,0.4],
                              [0.4,0.6]])]
 
-N_total = 100  # total number of datapoints wanted
+N_total = 500  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -42,8 +42,10 @@ N = 1
 # (should automatically reduce the contribution of unnecessary components to 0)
 K = 2
 # Number of  updates to perform
-n_its = 10
-n_plots = 10
+n_its = 100
+n_plots = 100
+save_figs = False
+if not save_figs: assert(n_plots < 20)
 
 
 #%% 2. Initialise parameters
@@ -115,7 +117,7 @@ x = X[n]
 
 #%% 3. Sample model parameters, calculate ELBO, calculate gradients, update
 
-step = 0.0 # can't use the same step size for everything - but for now
+step = 0.001 # can't use the same step size for everything - but for now
 
 def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
     # doesn't currently work
@@ -186,15 +188,24 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     print("\nELBO: = %.3f" % L)
     if n % plot_every_nth == 0:
         title = 'Update %d' % n
-        plot_GMM(X, mu, lam, pi, centres, covs, K, title) 
-    print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
-    print("\ndL/d_b = ", d_b)
-    print("\ndL/d_m = ", d_m)
-    print("\ndL/d_V = ", d_V)
-    print('\ndL/du = ', d_u)
+        if save_figs==True:
+            filepath = 'figs/%03d.png'%n
+            plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=filepath)
+        else:
+            plot_GMM(X, mu, lam, pi, centres, covs, K, title)
+    # print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
+    # print("\ndL/d_b = ", d_b)
+    # print("\ndL/d_m = ", d_m)
+    # print("\ndL/d_V = ", d_V)
+    # print('\ndL/du = ', d_u)
     
     # Update alpha, W, beta, m, nu
-    step_V, step_a, step_b, step_m, step_u = step, step, step, step, step
+    step_V = step*1e-4 # step/(1000**0.5) 
+    step_a = step/10
+    step_b = step*(1000**0.5)
+    step_m = step
+    step_u = step*(1000**0.5)
+    
     for i in range(len(V)):
         V[i] = V[i] + step_V*d_V[i]
         a[i] = a[i] + step_a*d_a[i]
@@ -208,6 +219,7 @@ ELBO = np.zeros(n_its)
 betas = np.zeros((K,n_its))
 ms = np.zeros((2,n_its,K))
 nus = np.zeros((K,n_its))
+Ws = []
 
 plot_every_nth =  int(n_its/n_plots)
 for j in range(n_its):
@@ -216,30 +228,47 @@ for j in range(n_its):
     betas[:,j] = np.array(b**2).T
     nus[:,j] = np.array(abs(u)+2).T
     ms[:,j,:] = np.array(m).T
+    Ws.append([np.dot(V[k].T,V[k]) for k in range(K)])
+    
+with open('informative_priors2.pkl', 'rb') as f:
+    [a1, b1, V1, m1, u1] = pickle.load(f)
 
-
-plt.figure()
-plt.plot(ELBO)
-plt.xlabel('Iterations')
-plt.title('ELBO')
-
-plt.figure()
-plt.plot(betas.T)
-plt.title('Betas')
-plt.xlabel('Iterations')
+fig,axs = plt.subplots(2,3)
 
 plt.figure()
-plt.plot(nus.T)
-plt.title('Nus')
-plt.xlabel('Iterations')
+axs[0,0].plot(ELBO)
+axs[0,0].set_xlabel('Iterations')
+axs[0,0].set_title('ELBO')
 
-plt.figure()
-plt.plot(ms[0,:,:],ms[1,:,:])
-plt.title('movement of m, mean parameter of NW')
+axs[0,1].plot(betas.T)
+axs[0,1].set_title('Betas')
+axs[0,1].set_xlabel('Iterations')
+
+axs[0,2].plot(nus.T)
+axs[0,2].set_title('Nus')
+axs[0,2].set_xlabel('Iterations')
+
+axs[1,0].plot(ms[0,:,:],ms[1,:,:])
+axs[1,0].set_title('Movement of m, mean parameter of Gaussian-Wishart')
 # ms is size D*(n_its)*K
 for k in range(K):
     startx, starty, endx, endy = ms[0,0,k],ms[1,0,k],ms[0,-1,k],ms[1,-1,k]
-    plt.text(startx, starty, '0')
-    plt.text(endx, endy, '%d'%n_its)
+    axs[1,0].text(startx, starty, '0')
+    axs[1,0].text(endx, endy, '%d'%n_its)
+    
+for k in range(K):
+    Wvarx = np.array([Ws[n][k][0,0] for n in range(n_its)])
+    Wvary = np.array([Ws[n][k][1,1] for n in range(n_its)])
+    Wcov = np.array([Ws[n][k][1,0] for n in range(n_its)])
+    
+    axs[1,1].plot(Wvarx, cols[0])
+    axs[1,1].plot(Wvary, cols[1])
+    axs[1,1].plot(Wcov, cols[2])
+    axs[1,1].text(Wvarx.shape[0], Wcov[-1], 'k=%d'%k)
+    axs[1,1].text(Wvarx.shape[0], Wvarx[-1], 'k=%d'%k)
+    axs[1,1].text(Wvary.shape[0], Wvary[-1], 'k=%d'%k)
+axs[1,1].legend(['Var in x', 'Var in y', 'Covariance'])
+axs[1,1].set_xlabel('Iterations')
+axs[1,1].set_title('Variation of elements of W over time')
     
 

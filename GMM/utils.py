@@ -8,42 +8,41 @@ Created on Fri Dec  4 13:37:16 2020
 """
 import autograd.numpy as np
 from autograd.numpy import sin, cos
-from autograd.scipy.special import gamma, multigammaln
+from autograd.scipy.special import gamma, multigammaln, gammaln
 from scipy.stats import wishart # need to replace with own version
 from autograd.numpy.random import multivariate_normal
 from autograd.scipy.stats import multivariate_normal as norm
-from autograd.numpy.linalg import inv, det
+from autograd.numpy.linalg import inv, det, cholesky
 import matplotlib.pyplot as plt
 from autograd import grad
 
 
 #%%  Variational distribution q() components - EVALUATION
 
-def q_pi(pi, alpha):
+def log_q_pi(pi, alpha):
     # output = dirichlet.pdf(pi, alpha)
-    output = f_dirichlet(pi,alpha)
+    output = log_dirichlet(pi,alpha)
     return output
 
 # q(Lambda|nu, W)
-def q_lambda(lam, nu, W):
+def log_q_lambda(lam, nu, W):
     # Wishart distribution:
     # "The Wishart distribution arises as the distribution of the sample 
     # covariance matrix for a sample from a multivariate normal distribution."
-    return f_wishart(lam, W, nu)
+    return log_wishart(lam, W, nu)
 
-# q(mu|beta, m, Lambda)
-def q_mu(mu, m, beta, lam):
-    return norm.pdf(mu, m, inv(beta*lam))
+# log q(mu|beta, m, Lambda)
+def log_q_mu(mu, m, beta, lam):
+    return norm.logpdf(mu, m, inv(beta*lam))
 
+# SORT THIS
 # PROD_x[PROD_n[r_nk^{z_nk}]]
-def q_Z(Z,x,pi,mu,lam,N):
-    qZ = 1
-    N = 1   # single sample
-    K = pi.shape[0]
-    for n in range(N):
-        for k in range(K):
-            qZ = qZ * responsibility(x,k,pi,mu,lam)**Z[k]
-    return qZ
+def log_q_Z(Z,x,pi,mu,lam,N=1):
+    logqZ = 0.
+    z = np.argmax(Z)
+    for n in range(N): # currently doesn't work except for N=1
+        logqZ = logqZ + np.log(responsibility(x,z,pi,mu,lam))
+    return logqZ
 
 
 
@@ -81,7 +80,7 @@ def samples(alpha, beta, W, m, nu, x, K):
     # Need to calculate responsibility of each mixture component to sample Z
     r_nk = np.empty(K)
     for k in range(K):
-        r_nk[k] = responsibility(x,k,pi,mu,lam)
+        r_nk[k] = responsibility(x,k,pi,mu,lam) # doesn't use log probs
     Z = sample_Z(r_nk)
     return Z, pi, mu, lam, r_nk
 
@@ -89,38 +88,42 @@ def samples(alpha, beta, W, m, nu, x, K):
 #%% p() component - EVALUATION
 
 # p(X|Z,mu,lambda) -- p(point belongs to Gauss denoted by zk)
-def p_X_given_Z_mu_lambda(x,Z,mu,lam):
+def log_p_X_given_Z_mu_lambda(x,Z,mu,lam):
     # evaluate likelihood wrt partiular mixture component
     k = np.argmax(Z)
-    return norm.pdf(x,mu[k],lam[k])
+    return norm.logpdf(x,mu[k],lam[k])
 
 # p(Z|pi) = PROD_k[ pi^znk ]
-def p_Z_given_pi(Z, pi):
+# log p(Z|pi) = z(k==1)*pi[k]
+def log_p_Z_given_pi(Z, pi):
+    z = np.argmax(Z)
     # likelihood of random new x being from Gaussian denoted by one-hot Z
-    return np.sum(np.multiply(pi,Z))
+    return np.log(pi[z])
 
 # as far as I can tell these are all the same as the corresponding q()
-def p_pi(pi, alpha):
-    return q_pi(pi, alpha)
-def p_lambda(lam, nu, W):
-    return q_lambda(lam, nu, W)
-def p_mu_given_lambda(mu, m, beta, lam):
-    return q_mu(mu, m, beta, lam)
+def log_p_pi(pi, alpha):
+    return log_q_pi(pi, alpha)
+def log_p_lambda(lam, nu, W):
+    return log_q_lambda(lam, nu, W)
+def log_p_mu_given_lambda(mu, m, beta, lam):
+    return log_q_mu(mu, m, beta, lam)
 
 
 #%% Distribution functions
+# have checked that these give the same result as scip.stats.___.logpdf
 
 # Dirichlet
-def f_dirichlet(pi,alpha):
-    B = np.prod(gamma(alpha))/gamma(np.sum(alpha))
-    return (1/B)*np.prod(pi**(alpha-1.))
+def log_dirichlet(pi,alpha):
+    logB = np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
+    return -logB + np.sum((alpha-1.)*np.log(pi))
 
 # Wishart
-def f_wishart(lam, W, nu, d=2):
+def log_wishart(lam, W, nu, d=2):
     # default dimensionality = 2
-    num = (det(lam)**((nu-d-1)/2))*np.exp(-np.trace(np.dot(inv(W),lam))/2)
-    den = (2**(nu*d/2))*(det(W)**(nu/2))*np.exp(multigammaln(nu/2,d))
-    return num/den
+    lognum1 = ((nu-d-1)/2)*np.log(det(lam))
+    lognum2 = -np.trace(np.dot(inv(W),lam))/2
+    logden1 = (nu*d/2)*np.log(2) + (nu/2)*np.log(det(W))
+    return lognum1 + lognum2 - logden1 - multigammaln(nu/2,d)
 
 #%% Major steps
 
@@ -146,33 +149,23 @@ def calculate_ELBO(x, Z,
     # 4.1. log p(X,Z,pi,mu,lambda) = 
     #   log[ p(X|Z,mu,lambda).p(Z|pi).p(pi).p(mu|lambda).p(lambda) ]
 
-    Elogp = [p_X_given_Z_mu_lambda(x,Z,mu,lam), 
-             p_Z_given_pi(Z, pi), 
-             p_pi(pi, alpha0)]
+    Elogp = [log_p_X_given_Z_mu_lambda(x,Z,mu,lam), 
+             log_p_Z_given_pi(Z, pi), 
+             log_p_pi(pi, alpha0)]
     for k in range(K):
-        Elogp.append(p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k]))
-        Elogp.append(p_lambda(lam[k], nu0[k], W0[k]))
-    for term in range(len(Elogp)):
-        if Elogp[term]==0:
-            print('\n\nERROR\n%dth term in Elogp = 0\n'%term)
-            print(errortxt1)
-            sys.exit()
-    Elogp = np.sum(np.log(np.array(Elogp)))
+        Elogp.append(log_p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k]))
+        Elogp.append(log_p_lambda(lam[k], nu0[k], W0[k]))
+    Elogp = np.sum(np.array(Elogp))
     # print('Elogp: ', Elogp)
     
     # 4.2. log q(Z,pi,mu,lambda) = 
     #   log[ q(Z).q(pi).PROD_K[ q(mu|lambda).p(lambda) ] ]
         
-    Elogq = [q_Z(Z,x,pi,mu,lam,N), q_pi(pi,alpha)]
+    Elogq = [log_q_Z(Z,x,pi,mu,lam,N), log_q_pi(pi,alpha)]
     for k in range(K):
-        Elogq.append(q_mu(mu[k], m[k], beta[k], lam[k]))
-        Elogq.append(q_lambda(lam[k], nu[k], W[k]))
-    for term in range(len(Elogq)):
-        if Elogq[term]==0:
-            print('\n\nERROR\n%dth term in Elogq = 0\n'%term)
-            print(errortxt2)
-            sys.exit()
-    Elogq = np.sum(np.log(np.array(Elogq)))
+        Elogq.append(log_q_mu(mu[k], m[k], beta[k], lam[k]))
+        Elogq.append(log_q_lambda(lam[k], nu[k], W[k]))
+    Elogq = np.sum(np.array(Elogq))
     # print('Elogq: ', Elogq)
     
     L = Elogp - Elogq
@@ -222,7 +215,7 @@ def draw_ellipse(mu,cov):
         Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
     return x+Ell_rot[0,:] , y+Ell_rot[1,:]
 
-def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
+def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=False):
     plt.figure()
     plt.plot(X[:,0], X[:,1], 'kx', alpha=0.2)
     
@@ -242,9 +235,21 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
     
     legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
     legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
-    plt.legend(legend)
     plt.title(title)
-    plt.show()
+    if isinstance(savefigpath, str):
+        plt.savefig(savefigpath)
+        plt.close()
+    else:
+        plt.legend(legend)
+        plt.show()
+    
+def informative_priors(centres, covs, K):
+    a = np.ones(2)*(10**0.5)  # large alpha means pi values are ~=
+    b = np.ones(2)*(1000**0.5)  # large beta keeps Gaussian from which mu is drawn small
+    V = [inv(cholesky(covs[k]))/(1000**0.5) for k in range(K)]
+    m = centres
+    u = np.ones(2)*(1000) - 2
+    return a, b, V, m, u
     
 import os, sys
 
