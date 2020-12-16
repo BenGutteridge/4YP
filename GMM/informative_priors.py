@@ -10,10 +10,12 @@ from autograd.numpy.random import multivariate_normal
 from autograd import grad
 import matplotlib.pyplot as plt
 plt.close('all')
-from numpy.linalg import inv
+from numpy.linalg import inv, cholesky
 
 # Misc
 from utils import samples, draw_ellipse, plot_GMM, calculate_ELBO, HiddenPrints, cols
+
+import pickle
 
 # playing with samples
 
@@ -24,7 +26,7 @@ covs = [np.eye(2), np.array([[0.6,0.4],
 
 K = 2
 
-N_total = 100  # total number of datapoints wanted
+N_total = 1000  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -33,12 +35,24 @@ X2 = multivariate_normal(mean=centres[1],
                          size=int(N_total/2))
 X = np.concatenate((X1,X2))
 
-
-alpha = np.ones(2)*100  # large alpha means pi values are ~=
-beta = np.ones(2)*1000  # large beta keeps Gaussian from which mu is drawn small
-W = [inv(covs[k])/1000 for k in range(K)]
+a = np.ones(2)*(10**0.5)  # large alpha means pi values are ~=
+b = np.ones(2)*(1000**0.5)  # large beta keeps Gaussian from which mu is drawn small
+V = [inv(cholesky(covs[k]))/(1000**0.5) for k in range(K)]
 m = centres
-nu = np.ones(2)*1000
+u = np.ones(2)*(1000) - 2
+
+alpha, beta, nu = a**2, b**2, abs(u)+2
+W = [np.dot(V[k].T,V[k]) for k in range(K)]
+
+# alpha = np.ones(2)*10  # large alpha means pi values are ~=
+# beta = np.ones(2)*1000  # large beta keeps Gaussian from which mu is drawn small
+# W = [inv(covs[k])/1000 for k in range(K)]
+# m = centres
+# nu = np.ones(2)*1000
+
+informative_priors = [a,b,V,m,u]
+with open('informative_priors2.pkl', 'wb') as f:
+    pickle.dump(informative_priors, f)
 """
 nu = d is the least informative prior, and the smallest, so  a large nu
 is more informative. On its own this makes the lam samples huge, so

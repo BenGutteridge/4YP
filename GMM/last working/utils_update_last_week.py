@@ -36,7 +36,7 @@ def q_mu(mu, m, beta, lam):
     return norm.pdf(mu, m, inv(beta*lam))
 
 # PROD_x[PROD_n[r_nk^{z_nk}]]
-def q_Z(Z,x,pi,mu,lam,N):
+def q_Z(Z,x,pi,mu,lam):
     qZ = 1
     N = 1   # single sample
     K = pi.shape[0]
@@ -70,13 +70,9 @@ def sample_Z(r_nk):
 def samples(alpha, beta, W, m, nu, x, K):
     mu, lam = [],[]
     pi = sample_pi(alpha)
-    try:
-        for k in range(K):
-            lam.append(sample_lambda(W[k], nu[k]))
-            mu.append(sample_mu(m[k], beta[k], lam[k]))
-    except:
-        raise Exception('\n\n***ERROR***\n\nEither p or q has gone to zero, causing Elogp or Elogq to go to -Inf\n')
-        
+    for k in range(K):
+        lam.append(sample_lambda(W[k], nu))
+        mu.append(sample_mu(m[k], beta[k], lam[k]))
     
     # Need to calculate responsibility of each mixture component to sample Z
     r_nk = np.empty(K)
@@ -100,8 +96,8 @@ def p_Z_given_pi(Z, pi):
     return np.sum(np.multiply(pi,Z))
 
 # as far as I can tell these are all the same as the corresponding q()
-def p_pi(pi, alpha):
-    return q_pi(pi, alpha)
+def p_pi(pi, alpha0):
+    return q_pi(pi, alpha0)
 def p_lambda(lam, nu, W):
     return q_lambda(lam, nu, W)
 def p_mu_given_lambda(mu, m, beta, lam):
@@ -116,68 +112,15 @@ def f_dirichlet(pi,alpha):
     return (1/B)*np.prod(pi**(alpha-1.))
 
 # Wishart
-def f_wishart(lam, W, nu, d=2):
-    # default dimensionality = 2
+def f_wishart(lam, W, nu):
+    d = 2   # dimensionality
     num = (det(lam)**((nu-d-1)/2))*np.exp(-np.trace(np.dot(inv(W),lam))/2)
-    den = (2**(nu*d/2))*(det(W)**(nu/2))*np.exp(multigammaln(nu/2,d))
+    den = (2**(nu*d/2))*(det(W)**(nu/2))*multigammaln(nu/2,d)
     return num/den
+
 
 #%% Major steps
 
-def calculate_ELBO(x, Z, 
-                   pi, mu, lam,
-                   a, b, m, V, u,
-                   p_dist_params,
-                   K, N):
-    # pi, mu, lam = model_params['pi'], model_params['mu'], model_params['lam']
-    
-    errortxt1 = "Elogp\n0: p(X|Z,mu,lam)\n1: p(Z|pi)\n2: p(pi|alpha0)\n3,5,7,9,11: p(mu[k]|lam[k])\n4,6,8,10,12: p(lam|nu0,W0))"
-    errortxt2 = "Elogq\n0: q(Z|x,pi,mu,lam)\n1: q(pi|alpha)\n2,4,6,8,10: q(mu[k]|lam[k])\n3,5,7,9,11: q(lam|nu,W)"
-    
-    alpha0, beta0, W0, m0, nu0= \
-    p_dist_params['alpha'], p_dist_params['beta'], p_dist_params['W'],\
-        p_dist_params['m'], p_dist_params['nu'],
-    
-    alpha = a**2
-    beta = b**2
-    W = [np.dot(V[k].T, V[k]) for k in range(K)]
-    nu = abs(u)+2     # nu > D+1 
-
-    # 4.1. log p(X,Z,pi,mu,lambda) = 
-    #   log[ p(X|Z,mu,lambda).p(Z|pi).p(pi).p(mu|lambda).p(lambda) ]
-
-    Elogp = [p_X_given_Z_mu_lambda(x,Z,mu,lam), 
-             p_Z_given_pi(Z, pi), 
-             p_pi(pi, alpha0)]
-    for k in range(K):
-        Elogp.append(p_mu_given_lambda(mu[k], m0[k], beta0[k], lam[k]))
-        Elogp.append(p_lambda(lam[k], nu0[k], W0[k]))
-    for term in range(len(Elogp)):
-        if Elogp[term]==0:
-            print('\n\nERROR\n%dth term in Elogp = 0\n'%term)
-            print(errortxt1)
-            sys.exit()
-    Elogp = np.sum(np.log(np.array(Elogp)))
-    # print('Elogp: ', Elogp)
-    
-    # 4.2. log q(Z,pi,mu,lambda) = 
-    #   log[ q(Z).q(pi).PROD_K[ q(mu|lambda).p(lambda) ] ]
-        
-    Elogq = [q_Z(Z,x,pi,mu,lam,N), q_pi(pi,alpha)]
-    for k in range(K):
-        Elogq.append(q_mu(mu[k], m[k], beta[k], lam[k]))
-        Elogq.append(q_lambda(lam[k], nu[k], W[k]))
-    for term in range(len(Elogq)):
-        if Elogq[term]==0:
-            print('\n\nERROR\n%dth term in Elogq = 0\n'%term)
-            print(errortxt2)
-            sys.exit()
-    Elogq = np.sum(np.log(np.array(Elogq)))
-    # print('Elogq: ', Elogq)
-    
-    L = Elogp - Elogq
-    # print("Loss (ELBO) = %.3f" % L)
-    return L
 
 #%% Misc
 
@@ -229,10 +172,9 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
     legend = ['Datapoints']
     
     for k in range(K):
-        cov = inv(lam[k])
-        x_ell, y_ell = draw_ellipse(mu[k], cov)
+        x_ell, y_ell = draw_ellipse(mu[k], lam[k])
         plt.plot(x_ell, y_ell, cols[k], alpha=pi[k])
-        legend.append('pi=%.2f, var1=%.2f, var2=%.2f, cov=%.2f'%(pi[k],cov[0,0],cov[1,1],cov[1,0]))
+        legend.append('k=%d, pi=%.2f'%(k,pi[k]))
         # for whatever reason lots of the ellipses are very long and narrow, why?
         
     # Plotting the ellipses for the GMM that generated the data
@@ -240,19 +182,7 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols):
         x_true_ell, y_true_ell = draw_ellipse(centres[i], covs[i])
         plt.plot(x_true_ell, y_true_ell, 'g--')
     
-    legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
-    legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
+    legend.append('Data generation GMM')
     plt.legend(legend)
     plt.title(title)
     plt.show()
-    
-import os, sys
-
-class HiddenPrints:
-    def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = open(os.devnull, 'w')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout.close()
-        sys.stdout = self._original_stdout

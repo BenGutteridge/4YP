@@ -11,8 +11,10 @@ Created on Thu Nov 19 12:14:06 2020
 # External
 import autograd.numpy as np
 from autograd.numpy.random import multivariate_normal
+from autograd.scipy.linalg import cholesky
 from autograd import grad
 import matplotlib.pyplot as plt
+import pickle
 plt.close('all')
 
 # Misc
@@ -25,7 +27,7 @@ centres = [np.array([0.,3.]), np.array([2.,0.])]
 covs = [np.eye(2), np.array([[0.6,0.4],
                              [0.4,0.6]])]
 
-N_total = 1000  # total number of datapoints wanted
+N_total = 100  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -38,9 +40,10 @@ X = np.concatenate((X1,X2))
 N = 1
 # How many mixture components do we want to start with
 # (should automatically reduce the contribution of unnecessary components to 0)
-K = 5
+K = 2
 # Number of  updates to perform
 n_its = 10
+n_plots = 10
 
 
 #%% 2. Initialise parameters
@@ -68,7 +71,7 @@ V0, m0 = [], []
 for k in range(K):  # mean and precision needed for each mixture component
     m0.append(m_)
     V0.append(V_)
-"a reasonable choice for V would be a prior guess for the precision / n"
+"a reasonable choice for W would be a prior guess for the precision / nu"
 
 alpha0 = a0**2
 beta0 = b0**2
@@ -94,19 +97,25 @@ u = np.ones(K)*1.1
 n = 0 # Taking a single point from the dataset
 x = X[n]
 
-# Transforming into parameters, thus imposing constraints
-alpha = a**2
-beta = b**2
-W = [np.dot(V[k].T, V[k]) for k in range(K)]
-nu = abs(u) + 2
+# # Transforming into parameters, thus imposing constraints
+# alpha = a**2
+# beta = b**2
+# W = [np.dot(V[k].T, V[k]) for k in range(K)]
+# nu = abs(u) + 2
 
-
+# # INFORMATIVE PRIORS
+# for j in range(len(covs)):
+#     V[j] = covs[j]/(1000**0.5)
+#     a[j] = 10
+#     b[j] = b[j]*(1000**0.5)
+#     u[j] = u[j]*(1000**0.5)
+#     m[j] = centres[j]
 
 
 
 #%% 3. Sample model parameters, calculate ELBO, calculate gradients, update
 
-step = 0.01 # can't use the same step size for everything - but for now
+step = 0.0 # can't use the same step size for everything - but for now
 
 def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
     # doesn't currently work
@@ -118,15 +127,21 @@ def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
             L = L + calculate_ELBO(X[n],Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
     return L
 
-def update(x, a, b, m, V, u, p_dist_params, n, step, K, N):
+def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     print('\n***Iteration %d***'%n)
     
-    # sample parameters
+    if n==0 and K==2: # first iteration
+        with open('informative_priors2.pkl', 'rb') as f:
+            [a, b, V, m, u] = pickle.load(f)
+
+        # sample parameters
     alpha = a**2
     beta = b**2
     W = [np.dot(V[k].T, V[k]) for k in range(K)]
-    nu = np.abs(u) + 2
+    nu = np.abs(u) + 2    
+    
     Z, pi, mu, lam, r_nk = samples(alpha, beta, W, m, nu, x, K)
+
     
     # Calculate gradients and update steps
     if N==1:    # single sample estimate
@@ -169,7 +184,7 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N):
             
     # Display updates
     print("\nELBO: = %.3f" % L)
-    if n%1 == 0:
+    if n % plot_every_nth == 0:
         title = 'Update %d' % n
         plot_GMM(X, mu, lam, pi, centres, covs, K, title) 
     print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
@@ -191,15 +206,16 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N):
 # collect parameters for printing
 ELBO = np.zeros(n_its)
 betas = np.zeros((K,n_its))
-ms = np.zeros((2,K,n_its))
+ms = np.zeros((2,n_its,K))
 nus = np.zeros((K,n_its))
+
+plot_every_nth =  int(n_its/n_plots)
 for j in range(n_its):
-    a, b, V, m, u, ELBO[j] = update(X[j], a, b, m, V, u,
-                                        p_dist_params,
-                                        j, step, K, N)
+    a, b, V, m, u, ELBO[j] = update(X[j], a, b, m, V, u, p_dist_params,
+                                        j, step, K, N, plot_every_nth)
     betas[:,j] = np.array(b**2).T
     nus[:,j] = np.array(abs(u)+2).T
-    ms[:,:,j] = np.array(m).T
+    ms[:,j,:] = np.array(m).T
 
 
 plt.figure()
@@ -210,12 +226,20 @@ plt.title('ELBO')
 plt.figure()
 plt.plot(betas.T)
 plt.title('Betas')
+plt.xlabel('Iterations')
 
 plt.figure()
 plt.plot(nus.T)
 plt.title('Nus')
+plt.xlabel('Iterations')
 
 plt.figure()
 plt.plot(ms[0,:,:],ms[1,:,:])
 plt.title('movement of m, mean parameter of NW')
+# ms is size D*(n_its)*K
+for k in range(K):
+    startx, starty, endx, endy = ms[0,0,k],ms[1,0,k],ms[0,-1,k],ms[1,-1,k]
+    plt.text(startx, starty, '0')
+    plt.text(endx, endy, '%d'%n_its)
+    
 
