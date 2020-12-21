@@ -215,7 +215,7 @@ def draw_ellipse(mu,cov):
         Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
     return x+Ell_rot[0,:] , y+Ell_rot[1,:]
 
-def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=False):
+def plot_GMM(X, x, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=False):
     plt.figure()
     plt.plot(X[:,0], X[:,1], 'kx', alpha=0.2)
     
@@ -236,6 +236,7 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=Fal
     legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
     legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
     plt.title(title)
+    plt.plot(x[0], x[1], 'ro')
     if isinstance(savefigpath, str):
         plt.savefig(savefigpath)
         plt.close()

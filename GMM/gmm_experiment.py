@@ -27,7 +27,7 @@ centres = [np.array([0.,3.]), np.array([2.,0.])]
 covs = [np.eye(2), np.array([[0.6,0.4],
                              [0.4,0.6]])]
 
-N_total = 500  # total number of datapoints wanted
+N_total = 100  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -42,8 +42,8 @@ N = 1
 # (should automatically reduce the contribution of unnecessary components to 0)
 K = 2
 # Number of  updates to perform
-n_its = 100
-n_plots = 100
+n_its = N_total
+n_plots = 10
 save_figs = False
 if not save_figs: assert(n_plots < 20)
 
@@ -75,9 +75,14 @@ for k in range(K):  # mean and precision needed for each mixture component
     V0.append(V_)
 "a reasonable choice for W would be a prior guess for the precision / nu"
 
+# with open('informative_priors2.pkl', 'rb') as f:
+#     [a0, b0, V0, m0, u0] = pickle.load(f)
+# nu0 = abs(u0) + 2
+
 alpha0 = a0**2
 beta0 = b0**2
 W0 = [np.dot(V0[k].T, V0[k]) for k in range(K)]
+
 p_dist_params = {\
                  'alpha': alpha0,
                  'beta': beta0,
@@ -94,24 +99,17 @@ m = [m0[k] + 1. for k in range(K)]
 V = [V0[k] + np.eye(2) for k in range(K)]
 u = np.ones(K)*1.1
 
+# with open('informative_priors2.pkl', 'rb') as f:
+#     [a, b, V, m, u] = pickle.load(f)
+    
+# moving around
+# m = [np.array([1.,4.]), np.array([2.,-1.])]
+
 
 # Sample the model hyperparameters
 n = 0 # Taking a single point from the dataset
 x = X[n]
 
-# # Transforming into parameters, thus imposing constraints
-# alpha = a**2
-# beta = b**2
-# W = [np.dot(V[k].T, V[k]) for k in range(K)]
-# nu = abs(u) + 2
-
-# # INFORMATIVE PRIORS
-# for j in range(len(covs)):
-#     V[j] = covs[j]/(1000**0.5)
-#     a[j] = 10
-#     b[j] = b[j]*(1000**0.5)
-#     u[j] = u[j]*(1000**0.5)
-#     m[j] = centres[j]
 
 
 
@@ -131,12 +129,8 @@ def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
 
 def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     print('\n***Iteration %d***'%n)
-    
-    if n==0 and K==2: # first iteration
-        with open('informative_priors2.pkl', 'rb') as f:
-            [a, b, V, m, u] = pickle.load(f)
 
-        # sample parameters
+    # sample parameters
     alpha = a**2
     beta = b**2
     W = [np.dot(V[k].T, V[k]) for k in range(K)]
@@ -190,9 +184,9 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
         title = 'Update %d' % n
         if save_figs==True:
             filepath = 'figs/%03d.png'%n
-            plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=filepath)
+            plot_GMM(X, x, mu, lam, pi, centres, covs, K, title, savefigpath=filepath)
         else:
-            plot_GMM(X, mu, lam, pi, centres, covs, K, title)
+            plot_GMM(X, x, mu, lam, pi, centres, covs, K, title)
     # print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
     # print("\ndL/d_b = ", d_b)
     # print("\ndL/d_m = ", d_m)
@@ -200,11 +194,14 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     # print('\ndL/du = ', d_u)
     
     # Update alpha, W, beta, m, nu
-    step_V = step*1e-4 # step/(1000**0.5) 
+    step_V = step*1e-4 #step/(1000**0.5) 
     step_a = step/10
     step_b = step*(1000**0.5)
     step_m = step
     step_u = step*(1000**0.5)
+    
+    for k in range(K):
+        print('m_%d step size = [%.3f, %.3f]' % (k, step_m*d_m[k][0], step_m*d_m[k][1]))
     
     for i in range(len(V)):
         V[i] = V[i] + step_V*d_V[i]
@@ -221,9 +218,11 @@ ms = np.zeros((2,n_its,K))
 nus = np.zeros((K,n_its))
 Ws = []
 
+X_sampling = X.tolist()
 plot_every_nth =  int(n_its/n_plots)
 for j in range(n_its):
-    a, b, V, m, u, ELBO[j] = update(X[j], a, b, m, V, u, p_dist_params,
+    x = X_sampling.pop(np.random.randint(len(X_sampling)))
+    a, b, V, m, u, ELBO[j] = update(x, a, b, m, V, u, p_dist_params,
                                         j, step, K, N, plot_every_nth)
     betas[:,j] = np.array(b**2).T
     nus[:,j] = np.array(abs(u)+2).T
@@ -235,21 +234,20 @@ with open('informative_priors2.pkl', 'rb') as f:
 
 fig,axs = plt.subplots(2,3)
 
-plt.figure()
 axs[0,0].plot(ELBO)
-axs[0,0].set_xlabel('Iterations')
+# axs[0,0].set_xlabel('Iterations')
 axs[0,0].set_title('ELBO')
 
 axs[0,1].plot(betas.T)
-axs[0,1].set_title('Betas')
-axs[0,1].set_xlabel('Iterations')
+axs[0,1].set_title('Beta')
+# axs[0,1].set_xlabel('Iterations')
 
 axs[0,2].plot(nus.T)
-axs[0,2].set_title('Nus')
-axs[0,2].set_xlabel('Iterations')
+axs[0,2].set_title('Nu')
+# axs[0,2].set_xlabel('Iterations')
 
 axs[1,0].plot(ms[0,:,:],ms[1,:,:])
-axs[1,0].set_title('Movement of m, mean parameter of Gaussian-Wishart')
+axs[1,0].set_title('m')
 # ms is size D*(n_its)*K
 for k in range(K):
     startx, starty, endx, endy = ms[0,0,k],ms[1,0,k],ms[0,-1,k],ms[1,-1,k]
@@ -268,7 +266,7 @@ for k in range(K):
     axs[1,1].text(Wvarx.shape[0], Wvarx[-1], 'k=%d'%k)
     axs[1,1].text(Wvary.shape[0], Wvary[-1], 'k=%d'%k)
 axs[1,1].legend(['Var in x', 'Var in y', 'Covariance'])
-axs[1,1].set_xlabel('Iterations')
-axs[1,1].set_title('Variation of elements of W over time')
+# axs[1,1].set_xlabel('Iterations')
+axs[1,1].set_title('W')
     
 
