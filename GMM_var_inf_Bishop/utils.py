@@ -10,14 +10,14 @@ import scipy.stats
 import numpy as np
 from numpy.linalg import det, inv
 
-def make_gif(gifname, filedir):
+def make_gif(filedir):
   gifname = str(datetime.datetime.now())[:-7].replace(':',';')
   with imageio.get_writer(gifname+'.gif', mode='I') as writer:
       for filename in sorted(os.listdir(filedir)):
           image = imageio.imread(os.path.join(filedir,filename))
           writer.append_data(image)
 
-  Image(open("/content/%s.gif"%gifname,'rb').read())
+  return gifname
 
 def draw_ellipse(mu, cov, conf=.95):
     chiscale = scipy.stats.chi2.isf(1-conf,2)
