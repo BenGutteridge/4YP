@@ -1,1 +1,12 @@
 Misc/
+GMM/fixed_input_test
+GMM/last_working
+GMM/tests_dec
+GMM/matplotlibrc
+GMM/__pycache__
+GMM/figs
+GMM/figs/ELBO_frames*
+GMM/figs/misc
+GMM_var_inf_Bishop/plots*
+GMM_var_inf_Bishop/useful plots
+GMM_var_inf_Bishop/gifs*
