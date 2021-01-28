@@ -9,12 +9,14 @@ Created on Fri Dec  4 13:37:16 2020
 import autograd.numpy as np
 from autograd.numpy import sin, cos
 from autograd.scipy.special import gamma, multigammaln, gammaln
-from scipy.stats import wishart # need to replace with own version
+from scipy.stats import wishart
 from autograd.numpy.random import multivariate_normal
 from autograd.scipy.stats import multivariate_normal as norm
 from autograd.numpy.linalg import inv, det, cholesky
 import matplotlib.pyplot as plt
 from autograd import grad
+import scipy
+import matplotlib as mpl
 
 
 #%%  Variational distribution q() components - EVALUATION
@@ -134,9 +136,6 @@ def calculate_ELBO(x, Z,
                    K, N):
     # pi, mu, lam = model_params['pi'], model_params['mu'], model_params['lam']
     
-    errortxt1 = "Elogp\n0: p(X|Z,mu,lam)\n1: p(Z|pi)\n2: p(pi|alpha0)\n3,5,7,9,11: p(mu[k]|lam[k])\n4,6,8,10,12: p(lam|nu0,W0))"
-    errortxt2 = "Elogq\n0: q(Z|x,pi,mu,lam)\n1: q(pi|alpha)\n2,4,6,8,10: q(mu[k]|lam[k])\n3,5,7,9,11: q(lam|nu,W)"
-    
     alpha0, beta0, W0, m0, nu0= \
     p_dist_params['alpha'], p_dist_params['beta'], p_dist_params['W'],\
         p_dist_params['m'], p_dist_params['nu'],
@@ -194,13 +193,14 @@ cols = [\
         ]
 
 # Returns plottable coordinates for ellipses over 2D Gaussians
-def draw_ellipse(mu,cov):
+def draw_ellipse(mu,cov,num_sd=1):
     # as I understand it - 
         # diagonalise the cov matrix
         # use eigenvalues for radii
         # use eigenvector rotation from x axis for rotation
     x=mu[0]       #x-position of the center
     y=mu[1]      #y-position of the center
+    cov = cov*num_sd # show within num_sd standard deviations
     lam, V = np.linalg.eig(cov) # eigenvalues and vectors
     t_rot = np.arctan(V[1,0]/V[0,0])
     a, b = lam[0], lam[1]    
@@ -214,6 +214,19 @@ def draw_ellipse(mu,cov):
     for i in range(Ell.shape[1]):
         Ell_rot[:,i] = np.dot(R_rot,Ell[:,i])
     return x+Ell_rot[0,:] , y+Ell_rot[1,:]
+
+def draw_ellipse_2(mu, cov, conf=.95):
+    chiscale = scipy.stats.chi2.isf(1-conf,2)
+    v, w = np.linalg.eigh(cov)
+    v = 2. * np.sqrt(chiscale) * np.sqrt(v)
+    u = w[0] / np.linalg.norm(w[0])
+
+    # Plot an ellipse to show the Gaussian component
+    angle = np.arctan(u[1] / u[0])
+    angle = 180. * angle / np.pi  # convert to degrees
+    ell = mpl.patches.Ellipse(mu, v[0], v[1], 180. + angle)
+    # ell.set_clip_box(splot.bbox)
+    return ell 
 
 def plot_GMM(X, x, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=False):
     plt.figure()
@@ -239,7 +252,43 @@ def plot_GMM(X, x, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=
     plt.plot(x[0], x[1], 'ro')
     if isinstance(savefigpath, str):
         plt.savefig(savefigpath)
-        plt.close()
+    else:
+        plt.legend(legend)
+        plt.show()
+        
+def plot_GMM_2(X, x, mu, lam, pi, centres, covs, K, title, cols=cols, savefigpath=False):
+    plt.figure()
+    plt.xlim(-8,8)
+    plt.ylim(-6,10)
+    plt.plot(X[:,0], X[:,1], 'kx', alpha=0.2)
+    
+    legend = ['Datapoints']
+    
+    for k in range(K):
+        cov = inv(lam[k])
+        ell = draw_ellipse_2(mu[k], cov)
+        ell.set_alpha(0.5)
+        ell.set_edgecolor('m')
+        ell.set_fill(False)
+        splot = plt.subplot(1, 1, 1)
+        splot.add_artist(ell)
+        
+        # legend.append('pi=%.2f, var1=%.2f, var2=%.2f, cov=%.2f'%(pi[k],cov[0,0],cov[1,1],cov[1,0]))
+        # for whatever reason lots of the ellipses are very long and narrow, why?
+        
+    # Plotting the ellipses for the GMM that generated the data
+    for i in range(2):
+        true_ell = draw_ellipse_2(centres[i], covs[i])
+        true_ell.set_edgecolor('g')
+        true_ell.set_fill(False)
+        splot.add_artist(true_ell)
+    
+    # legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
+    # legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
+    plt.title(title)
+    plt.plot(x[0], x[1], 'ro')
+    if isinstance(savefigpath, str):
+        plt.savefig(savefigpath)
     else:
         plt.legend(legend)
         plt.show()

@@ -11,14 +11,15 @@ Created on Thu Nov 19 12:14:06 2020
 # External
 import autograd.numpy as np
 from autograd.numpy.random import multivariate_normal
-from autograd.scipy.linalg import cholesky
 from autograd import grad
 import matplotlib.pyplot as plt
-import pickle
+import pickle, os
 plt.close('all')
 
 # Misc
-from utils import samples, plot_GMM, calculate_ELBO, HiddenPrints, cols
+from utils import samples, plot_GMM, plot_GMM_2, calculate_ELBO, HiddenPrints, cols
+
+from testing_autograd import testing_autograd
 
 #%% 1. Create a (2D) dataset and plot it
 
@@ -27,7 +28,7 @@ centres = [np.array([0.,3.]), np.array([2.,0.])]
 covs = [np.eye(2), np.array([[0.6,0.4],
                              [0.4,0.6]])]
 
-N_total = 100  # total number of datapoints wanted
+N_total = 1000  # total number of datapoints wanted
 X1 = multivariate_normal(mean=centres[0],
                          cov=covs[0],
                          size=int(N_total/2))
@@ -36,16 +37,24 @@ X2 = multivariate_normal(mean=centres[1],
                          size=int(N_total/2))
 X = np.concatenate((X1,X2))
 
+# # Only a single mixture component
+# X = multivariate_normal(mean=centres[0],
+#                          cov=covs[0],
+#                          size=int(N_total/2))
+
 # Number of samples for estimates
 N = 1
 # How many mixture components do we want to start with
 # (should automatically reduce the contribution of unnecessary components to 0)
 K = 2
 # Number of  updates to perform
-n_its = N_total
+n_its = 10
 n_plots = 10
 save_figs = False
-if not save_figs: assert(n_plots < 20)
+if not save_figs: assert(n_plots < 20) # don't accidentally make >20 plots
+else: 
+    n_plots = n_its
+    plt.ioff()
 
 
 #%% 2. Initialise parameters
@@ -56,17 +65,12 @@ if not save_figs: assert(n_plots < 20)
 
 ### Initialise parameters of prior distributions of p (alpha0, beta0, m0, W0)
 
-# Dirichlet distribution over pi parameter -- alpha
-# "by symmetry we have chosen the same factor for each of the components"
-# "if alpha0 is small ... influenced primarily by data rather than priors"
 a0 = np.ones(K)*(0.1**0.5) # constant alpha0 for p(pi)
 
 # Wishart distribution over precision parameters -- scale and DoF: W and nu
 # Gaussian distribution over mu parameters -- inv(beta*lambda) & m
 b0 = np.ones(K)*1   #  not sure about this
 nu0 = np.ones(K)*2.     # degrees of freedom
-"""'The least informative, proper Wishart prior is obtained by setting 
-nu = dimensionality', from Wikipedia"""
 V_ = np.eye(2)/2  # 'interpreted as a precision matrix'
 m_ = np.zeros(2)  # "typically we would choose m0=0 by symmetry"
 V0, m0 = [], []
@@ -75,6 +79,7 @@ for k in range(K):  # mean and precision needed for each mixture component
     V0.append(V_)
 "a reasonable choice for W would be a prior guess for the precision / nu"
 
+# # Import pre-set informative priors for *p* distribution parameters
 # with open('informative_priors2.pkl', 'rb') as f:
 #     [a0, b0, V0, m0, u0] = pickle.load(f)
 # nu0 = abs(u0) + 2
@@ -99,11 +104,12 @@ m = [m0[k] + 1. for k in range(K)]
 V = [V0[k] + np.eye(2) for k in range(K)]
 u = np.ones(K)*1.1
 
-# with open('informative_priors2.pkl', 'rb') as f:
-#     [a, b, V, m, u] = pickle.load(f)
+# Import pre-set informative priors for *q* distribution parameters
+with open('informative_priors2.pkl', 'rb') as f:
+    [a, b, V, m, u] = pickle.load(f)
     
-# moving around
-# m = [np.array([1.,4.]), np.array([2.,-1.])]
+# Trying different starting positions
+m = [np.array([1.,4.]), np.array([2.,-1.])]
 
 
 # Sample the model hyperparameters
@@ -119,13 +125,13 @@ step = 0.001 # can't use the same step size for everything - but for now
 
 def multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N):
     # doesn't currently work
-    L = 0
+    Lsum = 0
     for n in range(N):
         print('Sample no.: ',n)
         Z, pi, mu, lam, r_nk = sample_sets[n]
         with HiddenPrints():
-            L = L + calculate_ELBO(X[n],Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
-    return L
+            Lsum = Lsum + calculate_ELBO(X[n],Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+    return Lsum/N
 
 def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     print('\n***Iteration %d***'%n)
@@ -137,7 +143,8 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     nu = np.abs(u) + 2    
     
     Z, pi, mu, lam, r_nk = samples(alpha, beta, W, m, nu, x, K)
-
+    
+    # testing_autograd(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
     
     # Calculate gradients and update steps
     if N==1:    # single sample estimate
@@ -183,10 +190,15 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     if n % plot_every_nth == 0:
         title = 'Update %d' % n
         if save_figs==True:
-            filepath = 'figs/%03d.png'%n
-            plot_GMM(X, x, mu, lam, pi, centres, covs, K, title, savefigpath=filepath)
+            filedir = 'figs/gifpics/'
+            filename = '%03d.png'%n
+            if n==0:
+                for file in os.listdir(filedir): # empty file first
+                    os.remove(os.path.join(filedir,file))
+            plot_GMM_2(X, x, mu, lam, pi, centres, covs, K, title, 
+                     savefigpath=filedir+filename)
         else:
-            plot_GMM(X, x, mu, lam, pi, centres, covs, K, title)
+            plot_GMM_2(X, x, mu, lam, pi, centres, covs, K, title)
     # print("\n\n***GRADIENTS***\ndL/d_a = ", d_a)
     # print("\ndL/d_b = ", d_b)
     # print("\ndL/d_m = ", d_m)
@@ -194,11 +206,11 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
     # print('\ndL/du = ', d_u)
     
     # Update alpha, W, beta, m, nu
-    step_V = step*1e-4 #step/(1000**0.5) 
-    step_a = step/10
-    step_b = step*(1000**0.5)
+    step_V = 0. #step*1e-4 #step/(1000**0.5) 
+    step_a = 0. #step/10
+    step_b = 0. #step*(1000**0.5)
     step_m = step
-    step_u = step*(1000**0.5)
+    step_u = 0. #step*(1000**0.5)
     
     for k in range(K):
         print('m_%d step size = [%.3f, %.3f]' % (k, step_m*d_m[k][0], step_m*d_m[k][1]))
@@ -209,6 +221,21 @@ def update(x, a, b, m, V, u, p_dist_params, n, step, K, N, plot_every_nth=1):
         b[i] = b[i] + step_b*d_b[i]
         m[i] = m[i] + step_m*d_m[i]
         u[i] = u[i] + step_u*d_u[i]
+        
+    # calculate ELBO with new m, everything else the same
+    if N==1:
+        Lnew = calculate_ELBO(x,Z,pi,mu,lam,a,b,m,V,u,p_dist_params,K,N)
+    else:
+        sample_sets = []
+        for i in range(N):
+            sample_set = samples(alpha, beta, W, m, nu, X[n], K)
+            sample_sets.append(sample_set)
+            
+        L = multi_sample_ELBO(X,sample_sets,a,b,m,V,u,p_dist_params,K,N)
+    ##### N.B. THIS USES MULTI L AS L BUT SINGLE SAMPLE FOR Lnew
+    # print('Lnew-L = ', Lnew-L, '\n(No changes)')
+    # if Lnew < L:
+    #     input('\nStopped because Lnew < L\nLnew = %f\nL = %f\n\nEnter any key to continue'%(Lnew,L))
     return a, b, V, m, u, L
 
 # collect parameters for printing
@@ -248,6 +275,9 @@ axs[0,2].set_title('Nu')
 
 axs[1,0].plot(ms[0,:,:],ms[1,:,:])
 axs[1,0].set_title('m')
+axs[1,0].plot(np.array([centres[0][0],centres[1][0]]),
+             np.array([centres[0][1],centres[1][1]]),
+             'rx')
 # ms is size D*(n_its)*K
 for k in range(K):
     startx, starty, endx, endy = ms[0,0,k],ms[1,0,k],ms[0,-1,k],ms[1,-1,k]
@@ -268,5 +298,11 @@ for k in range(K):
 axs[1,1].legend(['Var in x', 'Var in y', 'Covariance'])
 # axs[1,1].set_xlabel('Iterations')
 axs[1,1].set_title('W')
+
+if save_figs:
+    from make_gif import make_gif
+    import datetime
+    gifname = str(datetime.datetime.now())[:-7].replace(':',';')
+    make_gif('figs/gifs_autogen/'+gifname, 'figs/gifpics/')
     
 
