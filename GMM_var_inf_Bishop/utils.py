@@ -5,14 +5,13 @@ import imageio
 import os
 import datetime
 import matplotlib.pyplot as plt
-import scipy
-import scipy.stats
-import numpy as np
-from numpy.linalg import det, inv
+from scipy.stats import chi2
+import autograd.numpy as np
+from autograd.numpy.linalg import det, inv
 
-def make_gif(filedir):
+def make_gif(filedir, gifdir):
   gifname = str(datetime.datetime.now())[:-7].replace(':',';')
-  with imageio.get_writer(gifname+'.gif', mode='I') as writer:
+  with imageio.get_writer(gifdir+'/'+gifname+'.gif', mode='I') as writer:
       for filename in sorted(os.listdir(filedir)):
           image = imageio.imread(os.path.join(filedir,filename))
           writer.append_data(image)
@@ -20,7 +19,7 @@ def make_gif(filedir):
   return gifname
 
 def draw_ellipse(mu, cov, conf=.95):
-    chiscale = scipy.stats.chi2.isf(1-conf,2)
+    chiscale = chi2.isf(1-conf,2)
     v, w = np.linalg.eigh(cov)
     v = 2. * np.sqrt(chiscale) * np.sqrt(v)
     u = w[0] / np.linalg.norm(w[0])
