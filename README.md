@@ -1,12 +1,16 @@
 # 4YP
-
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
 
-To Do over Christmas break:
-- Experiment with updating parameter `m` only, investigate if the autodiff is actually working.
-- Get it working, and get it to work with batch GD as well
-- Compare single sample and batch, and if time, look into the impact of step size in conjunction with batch size - e.g. can we take larger steps with truer gradient, etc? See book.
-- Writeup literature review and methodology more properly
+### 28/1/2021
+Co-ordinate variational inference for a Gaussian mixture model:
+https://colab.research.google.com/drive/1JrLIbMR4OrrBDVjIrJX8tKpMRhM-_8Wd?usp=sharing
+
+`GMM_var_inf_Bishop` contains an updated script for batch GD -- this works better than the script in `GMM`, which I am leaving alone for the time being.
+
+N.b. The above notebook requires `MM_var_inf_Bishop/utils.py`
+
+
+
 
 ![alt text](GMM/figs/GMM_components.gif)
 
