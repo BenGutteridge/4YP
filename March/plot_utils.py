@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar  8 16:21:20 2021
+
+@author: benpg
+
+Plot utility functions
+"""
+
 import matplotlib as mpl
 import sys
 from IPython.display import Image
@@ -38,11 +47,18 @@ class HiddenPrints:
     def __exit__(self, exc_type, exc_val, exc_tb):
         sys.stdout.close()
         sys.stdout = self._original_stdout
+        
+# Expected value of pi for plotting ellipses, relative weights, used for transparency
+def E_pi(alpha, alpha0, N):
+    K = alpha.shape[0]
+    return [(alpha[k])/(K*alpha0 + N) for k in range(K)]
 
-def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False):
+
+def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=[-5,10,-5,15]):
     plt.figure()
-    plt.xlim(-5,10)
-    plt.ylim(-5,15)
+    if xylims != None:
+        plt.xlim(xylims[0],xylims[1])
+        plt.ylim(xylims[2],xylims[3])
     plt.plot(X[:,0], X[:,1], 'kx', alpha=0.2)
     
     legend = ['Datapoints']
@@ -71,4 +87,39 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False):
     else:
         plt.legend(legend)
         plt.show()
-		
+    
+
+def plot_ELBO(ELBO, ELBO_E, ELBO_M, N_its):
+    fig=plt.figure(figsize=(14,6), dpi= 100, facecolor='w', edgecolor='k')
+    plt.plot(np.arange(0,N_its,0.5), ELBO)
+    plt.plot(ELBO_M)
+    plt.plot(np.arange(N_its)+0.5, ELBO_E)
+    plt.legend(['overall', 'after M step', 'after E step'])
+    plt.xlabel('Iterations')
+    plt.ylabel('Evidence lower bound')
+    plt.show();
+    
+# Plot evolution of a 1D parameter (a K-length vector) evolve over time 
+def plot_1D_phi(phis, title, K):
+    plt.figure()
+    legends = []
+    for k in range(K):
+      plt.plot(phis[:,k].T)
+      legends.append('k=%d'%k)
+    plt.legend(legends)
+    plt.title(title)
+    plt.xlabel('Iterations')
+ 
+# Plot individual elements (variance in x,y, and covariance) of K components over time
+def plot_K_covs(varx,vary,covxy,K):
+    legends = []
+    for k in range(K):
+      plt.figure()
+      plt.plot(varx[:,k].T, 'r')
+      plt.plot(vary[:,k].T, 'b')
+      plt.plot(covxy[:,k].T, 'g')
+      legends += ['var_x', 'var_y', 'cov_xy']
+      plt.legend(legends)
+      plt.title('Covariance matrix k=%d'%k)
+      plt.xlabel('Iterations')
+        		
