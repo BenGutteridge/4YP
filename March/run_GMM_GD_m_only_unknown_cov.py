@@ -40,7 +40,7 @@ W0 = np.eye(2)    #
 nu0 = 2           # 
 
 # Saving plots and making gif
-verbose = False
+verbose = True
 filedir = 'plots'
 gifdir = 'gifs'
 
@@ -55,6 +55,9 @@ for _ in tqdm(range(N_its_pretrain)):
     r = E_step(N,K,alpha,nu,W,beta,m,X)
 
 # %% Shifting pretrained model and retraining using true GD (only m) 
+
+# Shifting alpha as well
+alpha = np.ones(K) * (N/K)
 
 # Shift m (variational distribution of mean)
 for k in range(K):
@@ -87,7 +90,7 @@ for i in tqdm(range(N_its)):
 
     # Plot
     Epi = E_pi(alpha, alpha0, N)
-    title = 'iteration %d' % i
+    title = 'GD for m: iteration %d' % i
     filename = 'plots/img%04d.png'%i
     # plot_GMM(X, mu, lam, pi, centres, covs, K, title)
     plot_GMM(X, m, inv(S), Epi, centres, covs, K, title, savefigpath=filename)
@@ -101,10 +104,3 @@ gifname = make_gif(filedir, gifdir)
 # delete pngs for next run
 for file in os.listdir(filedir):
   os.remove(os.path.join(filedir,file))
-
-
-
-
-
-
-    

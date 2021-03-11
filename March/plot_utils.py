@@ -64,7 +64,8 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     legend = ['Datapoints']
     
     for k in range(K):
-        plt.plot(mu[k][0],mu[k][1],'ro')
+        if np.sum(mu[k] == np.zeros(2)) == 0:
+            plt.plot(mu[k][0],mu[k][1],'ro')
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])

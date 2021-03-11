@@ -57,3 +57,7 @@ def Dnu(Nk, xkbar, Sk, W, nu, beta0, m0, W0, nu0, K, D):
         d_nu[k] = 0.5*((Nk[k]+nu0-nu[k])*d_ln_lam_d_nu(k,nu,W,D) - np.trace(np.dot(W_hat_k,W[k])) + D)
     return d_nu
 
+# def D_rnk():
+#     a = (ln_lam_tilde_k(k,nu,W,D) - D*beta[k]**(-1))*0.5
+#     b = -np.log(rnk)-1 + 
+

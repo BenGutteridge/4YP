@@ -19,7 +19,7 @@ def x_k_bar(Nk, responsibilities_k, X, D=2):
   if Nk > 0:
     return (1/Nk)*sum
   else:
-    return 0.
+    return np.zeros(2) # component is dead
 
 def S_k(Nk, responsibilities_k, X, xkbar):
   sum = 0.0
