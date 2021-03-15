@@ -70,8 +70,8 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
         if np.sum(mu[k] == np.zeros(2)) == 0:
             plt.plot(mu[k][0],mu[k][1],'ro')
             plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
-        else:
-            plt.plot(0,0,'x')
+        else: 
+            plt.plot(0,0,'kX')
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])

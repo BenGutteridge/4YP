@@ -7,6 +7,8 @@ from calculate_responsibilities import r_nk
 from plot_utils import plot_GMM, E_pi, make_gif
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
+from grad_funcs import L_grad_alpha, L_grad_m, L_grad_invC
+from EM_steps import perturb_variational_params
 from copy import deepcopy
 from tqdm import tqdm
 import os
@@ -56,21 +58,66 @@ class VariationalDistribution:
             self.xbar[k] = x_k_bar(self.NK[k], r[:,k], X)
             self.SK[k] = S_k(self.NK[k], r[:,k], X, self.xbar[k])
             
+    def M_step(self, X, joint_distribution, inv_sigma):
+        self.calculate_Nk_xkbar_Sk(X)
+        for k in range(self.K):
+            self.alpha[k] = alpha_k(self.NK[k], joint.alpha)
+            self.means[k], self.precisions[k] = m_invC_k(self.NK[k], self.xbar[k], joint.mean, joint.precision, inv_sigma)
+            self.covariances[k] = inv(self.precisions[k])
+        self.update_type = 'CAVI'
+            
+    def M_step_GD(self, X, joint_distribution, invSig,
+                  step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-4}):
+        # performing GD update for M step rather than CAVI update equations
+        self.step_sizes = step_sizes
+        
+        self.calculate_Nk_xkbar_Sk(X)
+        
+        # Gradient update equations
+        self.d_alpha = L_grad_alpha(joint_distribution.alpha, self.alpha, self.NK)
+        self.d_m = L_grad_m(self.means, joint_distribution.mean, joint_distribution.precision, invSig, self.NK, self.xbar)
+        self.d_invC = L_grad_invC(self.means, self.precisions, invSig, joint_distribution.precision, self.NK)
+    
+        for k in range(self.K): 
+            # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
+            self.alpha[k] = np.max((0.1, self.alpha[k] + self.d_alpha[k]*step_sizes['alpha']))
+            self.means[k] = self.means[k] + self.d_m[k]*step_sizes['m']
+            self.precisions[k] = self.precisions[k] + self.d_invC[k]*step_sizes['invC']
+            self.covariances[k] = inv(self.precisions[k])
+        self.update_type = 'GD'
+            
+    def E_step(self, X, inv_sigma, alpha_lb=0.1):
+        N = X.shape[0]
+        for k in range(self.K):
+            if self.alpha[k] <= alpha_lb: 
+                self.responsibilities[:,k] = np.zeros(N) # fix?
+            else:
+                for n in range(N):
+                    self.responsibilities[n,k] = r_nk(k, self.alpha, self.means, self.covariances, inv_sigma, X[n])
+                    
+    def perturb_variational_params(self, non_diag=False):
+        # fill in
+        pass
+                    
+    def update_precision_from_covariance(self):
+        for k in range(self.K):
+            self.precisions[k] = inv(self.covariances[k])
+            
 
 # "priors"
 alpha_0 = 1e-3
 m_0 = np.zeros(2)
 C_0 = np.eye(2)
-K = 3
+K = 5
 
 # Iterations
-N_its = 5
+N_its = 40
 
 # Generate dataset
 N = 100
 num_clusters = 2
 X, centres, covs = generate_2D_dataset(N, K=num_clusters, 
-                                       weights=np.array([0.1,0.9]),
+                                       weights=np.array([0.5,0.5]),
                                        )
 
 # Fixed covariance of every component of the Gaussian mixture
@@ -89,7 +136,7 @@ def M_step(X, variational_distribution, joint_distribution):
 
     for k in range(K):
         q.alpha[k] = alpha_k(q.NK[k], joint.alpha)
-        q.means[k], variational_distribution.precisions[k] = m_invC_k(q.NK[k], q.xbar[k], joint.mean, joint.precision, inv_sigma)
+        q.means[k], q.precisions[k] = m_invC_k(q.NK[k], q.xbar[k], joint.mean, joint.precision, inv_sigma)
         q.covariances[k] = inv(q.precisions[k])
     
     return variational_distribution
@@ -105,8 +152,30 @@ def E_step(X, variational_distribution, inv_sigma, alpha_lb=0.1):
                 q.responsibilities[n,k] = r_nk(k, q.alpha, q.means, q.covariances, inv_sigma, X[n])
     return q
 
+def M_step_GD(X, variational_distribution, joint_distribution, invSig,
+              step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-4}):
+    # performing GD update for M step rather than CAVI update equations
+    q = variational_distribution
+    p = joint_distribution
+    q.calculate_Nk_xkbar_Sk(X)
+    
+    # Gradient update equations
+    d_alpha = L_grad_alpha(p.alpha, q.alpha, q.NK)
+    d_m = L_grad_m(q.means, p.mean, p.precision, invSig, q.NK, q.xbar)
+    d_invC = L_grad_invC(q.means, q.precisions, invSig, p.precision, q.NK)
+
+    for k in range(q.K): 
+        # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
+        q.alpha[k] = np.max((0.1, q.alpha[k] + d_alpha[k]*step_sizes['alpha']))
+        q.means[k] = q.means[k] + d_m[k]*step_sizes['m']
+        q.precisions[k] = q.precisions[k] + d_invC[k]*step_sizes['invC']
+        q.covariances[k] = inv(q.precisions[k])
+        
+    return variational_distribution, 'GD'
+
 
 def calculate_ELBO(variational_distribution, joint_distribution, invSig):
+    # certainly not the neatest way to do everything, but better than rewriting all my functions
     alpha0 = joint_distribution.alpha
     m0 = joint_distribution.mean
     C0 = joint_distribution.covariance
@@ -134,12 +203,23 @@ filedir = 'plots'
 gifdir = 'gifs'
 
 
+variational.M_step(X, joint, inv_sigma)
+variational.alpha, variational.means, variational.covariances = perturb_variational_params(alpha=variational.alpha, 
+                                                                                            m=variational.means, 
+                                                                                            C=variational.covariances, 
+                                                                                            non_diag=True)
+variational.update_precision_from_covariance() # need to make sure both change whenever one does
+
 for i in tqdm(range(N_its)):
     variational_distribution_memory.append(deepcopy(variational))
-    variational = M_step(X, variational, joint)
-    variational = E_step(X, variational, inv_sigma)
+    # variational = M_step(X, variational, joint)
+    # variational.M_step(X, joint, inv_sigma)
+    # variational, update_type = M_step_GD(X, variational, joint, inv_sigma)
+    variational.M_step_GD(X, joint, inv_sigma)
+    # variational = E_step(X, variational, inv_sigma)
+    variational.E_step(X, inv_sigma)
     
-    title = '(Class) CAVI: %d'%i
+    title = '(Class) %s: Iteration %d'%(variational_distribution_memory[-1].update_type, i)
     filename = 'plots/img%04d.png'%i
     Epi = E_pi(variational.alpha, joint.alpha, X.shape[0])
     plot_GMM(X, variational_distribution_memory[-1].means, K_inv_sigma, Epi, centres, covs, K, title,  savefigpath=filename)

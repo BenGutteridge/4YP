@@ -22,13 +22,13 @@ plt.ioff()
 # Dataset and update params
 N_its = 100
 N = 100
-K = 2
+K = 5
 D = 2
 
 N_clusters = 2
 # centres = [np.array([1,8]), np.array([6,5])]
 # covs = [np.eye(2), np.eye(2)]
-weights = np.array([0.1,0.9])
+weights = np.array([0.5,0.5])
 X, centres, covs = generate_2D_dataset(N, K=N_clusters, 
                                        # centres=centres, covs=covs,
                                        weights=weights,
@@ -63,9 +63,8 @@ alpha, m, C = perturb_variational_params(
                                         alpha=alpha, 
                                         m=m, 
                                         C=C,
+                                        non_diag=True,
                                         )
-# non-diagonal initialisation, otherwise C always remains diagonal
-C = [np.eye(2)+0.5*np.ones((2,2)) for _ in range(K)]
 
 ELBO, ELBO_M, ELBO_E = np.empty(2*N_its), np.empty(N_its), np.empty(N_its)
 for i in tqdm(range(N_its)):
@@ -77,7 +76,7 @@ for i in tqdm(range(N_its)):
       
     # M step
     alpha, m, C, NK, xbar, SK = M_step_GD(r, X, alpha, m, C, alpha0, m0, invC0, invSig, K,
-                step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-3},
+                step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-5},
                 )
     ELBO[2*i] = calculate_ELBO(r, alpha, m, C, invSig, alpha0, m0, C0, NK, xbar, SK)
     ELBO_M[i] = ELBO[2*i]

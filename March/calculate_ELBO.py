@@ -30,10 +30,11 @@ def E_ln_p_X_given_Z_mu(m, invSig, C0, NK, xbar, SK, D=2):
 
 def E_ln_p_Z_given_pi(r, alpha):
   sum = 0.
-  N = len(r[0])
+  if isinstance(r, list): r = np.array(r).T
+  N = r.shape[0]
   for n in range(N):
     for k in range(alpha.shape[0]):
-      sum = sum + r[k][n]*E_ln_pi_k(k,alpha)
+      sum = sum + r[n,k]*E_ln_pi_k(k,alpha)
   return sum
 
 def ln_C(alpha):
@@ -62,12 +63,14 @@ def E_ln_p_mu(m, C, m0, invC0, D=2):
     return float(Ksum)
 
 def E_ln_q_Z(r):
+    # convert r into an NxK array if it is a list
+    if isinstance(r, list): r = np.array(r).T
+    N, K = r.shape[0], r.shape[1]
     sum = 0.
-    N, K = len(r[0]), len(r) # r is a list of K lists of length N
     for n in range(N):
         for k in range(K):
-            if r[k][n] > 0: # n.b. returns nan for 0log0, so need to bypass
-                sum = sum + r[k][n]*np.log(r[k][n])
+            if r[n,k] > 0: # n.b. returns nan for 0log0, so need to bypass
+                sum = sum + r[n,k]*np.log(r[n,k])
     return sum
 
 def E_ln_q_pi(alpha):

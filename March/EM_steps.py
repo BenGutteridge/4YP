@@ -72,13 +72,16 @@ def M_step_GD(r, X, alpha, m, C, alpha0, m0, invC0, invSig, K,
     return alpha, m, inv(invC), NK, xbar, SK
 
 
-def perturb_variational_params(alpha=None, m=None, C=None):
+def perturb_variational_params(alpha=None, m=None, C=None, non_diag=False):
     if alpha is not None:
         K = alpha.shape[0]
         alpha = np.ones(K)*(np.sum(alpha)/K)
     if m is not None:
         m = [m[k] + np.random.randint(10,20,size=2)-10 for k in range(len(m))]
     if C is not None:
-        C = [np.eye(2) for _ in range(len(C))]
+        if non_diag == False:
+            C = [np.eye(2) for _ in range(len(C))]
+        else: # non-diagonal initialisation, otherwise C always remains diagonal
+            C = [np.eye(2)+0.5*np.ones((2,2)) for _ in range(K)]
     return alpha, m, C 
     
