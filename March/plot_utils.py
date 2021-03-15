@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 from scipy.stats import chi2
 import autograd.numpy as np
 from autograd.numpy.linalg import det, inv
+import warnings
+import matplotlib.cbook
+warnings.filterwarnings("ignore",category=matplotlib.cbook.mplDeprecation)
 
 def make_gif(filedir, gifdir):
   gifname = str(datetime.datetime.now())[:-7].replace(':',';')
@@ -66,6 +69,9 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     for k in range(K):
         if np.sum(mu[k] == np.zeros(2)) == 0:
             plt.plot(mu[k][0],mu[k][1],'ro')
+            plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
+        else:
+            plt.plot(0,0,'x')
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])

@@ -22,7 +22,7 @@ from calculate_ELBO_unknown_cov import calculate_ELBO
 # Dataset and update params
 N_its = 100
 N = 500
-K = 5
+K = 20
 D = 2
 
 N_clusters = 5
@@ -44,7 +44,7 @@ r = np.array([np.random.dirichlet(np.ones(K)) for _ in range(N)])
 r = [r[:,k] for k in range(K)]
 
 # for plotting
-alphas, betas = np.zeros((N_its,K)), np.zeros((N_its,K))
+alphas, NKs, betas = np.zeros((N_its,K)), np.zeros((N_its,K)), np.zeros((N_its,K))
 ms = np.zeros((N_its,K,D))
 varx, vary, covxy = np.empty((N_its,K)),np.empty((N_its,K)),np.empty((N_its,K)) 
 
@@ -65,6 +65,7 @@ for i in tqdm(range(N_its)):
   
   # Plot stuff
   alphas[i,:] = alpha
+  NKs[i,:] = NK
   betas[i,:] = beta
   # m is shape K,D when cast to nparray
   ms[i,:,:] = np.array(m) # shape N_its*K*D
@@ -97,6 +98,7 @@ plt.close('all')
 plot_ELBO(ELBO, ELBO_E, ELBO_M, N_its)
 plot_1D_phi(alphas, 'alphas', K)
 plot_1D_phi(betas, 'betas', K)
+plot_1D_phi(NKs, 'Nk', K)
 plot_K_covs(varx, vary, covxy, K)
 plt.show()
     

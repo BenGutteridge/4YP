@@ -14,7 +14,7 @@ from numpy.linalg import inv, det, multi_dot
 from scipy.special import gammaln
 from calculate_responsibilities import E_N_exp_k, E_ln_pi_k
 
-def E_ln_p_X_given_Z_mu(m, C, invSig, C0, NK, xbar, SK, D=2):
+def E_ln_p_X_given_Z_mu(m, invSig, C0, NK, xbar, SK, D=2):
     # needs checking - two Traces?
     Ksum = 0.0
     for k in range(len(m)):
@@ -37,6 +37,7 @@ def E_ln_p_Z_given_pi(r, alpha):
   return sum
 
 def ln_C(alpha):
+    # for dirichlet, not to be confused with C for covariance
   return gammaln(np.sum(alpha)) - np.sum(gammaln(alpha))
 
 def ln_B(W,nu,D=2):
@@ -51,11 +52,14 @@ def E_ln_p_pi(alpha0, alpha):
 
 
 def E_ln_p_mu(m, C, m0, invC0, D=2):
-    a = -D*np.ln(np.pi*2)
-    b = np.log(det(invC0))
-    v = (m-m0).reshape(2,1)
-    c = -multi_dot(v.T, invC0, v) - np.trace(np.dot(invC0, C))
-    return 0.5*(a+b+c)
+    Ksum = 0.0
+    for k in range(len(m)):
+        a = -D*np.log(np.pi*2)
+        b = np.log(det(invC0))
+        v = (m[k]-m0).reshape(2,1)
+        c = -multi_dot((v.T, invC0, v)) - np.trace(np.dot(invC0, C[k]))
+        Ksum +=  0.5*(a+b+c)
+    return float(Ksum)
 
 def E_ln_q_Z(r):
     sum = 0.
@@ -67,37 +71,31 @@ def E_ln_q_Z(r):
     return sum
 
 def E_ln_q_pi(alpha):
-  K = alpha.shape[0]
-  return np.sum(np.array([(alpha[k]-1)*E_ln_pi_k(k,alpha) for k in range(K)])) + ln_C(alpha)
+    K = alpha.shape[0]
+    return np.sum(np.array([(alpha[k]-1)*E_ln_pi_k(k,alpha) for k in range(K)])) + ln_C(alpha)
 
-def H_q_lam_k(k,nu,W,D=2):
-  return -ln_B(W[k],nu[k]) - 0.5*(nu[k]-D-1)*E_ln_lam_k(k, nu, W) + 0.5*nu[k]*D
+# def H_q_lam_k(k,nu,W,D=2):
+#   return -ln_B(W[k],nu[k]) - 0.5*(nu[k]-D-1)*E_ln_lam_k(k, nu, W) + 0.5*nu[k]*D
 
-def E_ln_q_mu_lam(beta,W,nu,D=2):
-  sum = 0.
-  for k in range(beta.shape[0]):
-    sum=sum+0.5*E_ln_lam_k(k,nu,W)+0.5*D*np.log(beta[k]/(2*np.pi))-0.5*D-H_q_lam_k(k,nu,W)
-  return sum
+# def E_ln_q_mu_lam(beta,W,nu,D=2):
+#   sum = 0.
+#   for k in range(beta.shape[0]):
+#     sum=sum+0.5*E_ln_lam_k(k,nu,W)+0.5*D*np.log(beta[k]/(2*np.pi))-0.5*D-H_q_lam_k(k,nu,W)
+#   return sum
 
-def calculate_ELBO(r,alpha,beta,m,W,nu,NK,S,xbar,alpha0,beta0,m0,W0,nu0):
-  p1 = E_ln_p_X_given_Z_mu_lam(beta, m, W, nu, NK, S, xbar)
-  p2 = E_ln_p_Z_given_pi(r, alpha)
-  p3 = E_ln_p_pi(alpha0, alpha)
-  p4 = E_ln_p_mu_lam(beta, m, W, nu, beta0, m0, W0, nu0) # this one is an array
-  q1 = E_ln_q_Z(r)
-  q2 = E_ln_q_pi(alpha)
-  q3 = E_ln_q_mu_lam(beta,W,nu)
-  # print(type(p1),type(p2),type(p3),type(p4),type(q1),type(q2),type(q3))
-  # print(p1)
-  # if np.sum(np.isnan([p1,p2,p3,p4,q1,q2,q3]))>0:
-  #   print('\nArgs of calculate ELBO:\nr,alpha,beta,m,W,nu,NK,S,xbar,alpha0,m0,W0,nu0')
-  #   print(r,alpha,beta,m,W,nu,NK,S,xbar,alpha0,m0,W0,nu0)
-  # assert not np.isnan(p1)
-  # assert not np.isnan(p2)
-  # assert not np.isnan(p3)
-  # assert not np.isnan(p4)
-  # assert not np.isnan(q1)
-  # assert not np.isnan(q2)
-  # assert not np.isnan(q3)
-    
-  return p1+p2+p3+p4-q1-q2-q3
+def E_ln_q_mu(C, D=2): # n.b. this is entropy of q(mu_k)
+    Ksum = 0.0
+    for k in range(len(C)):
+        Ksum += 0.5*D*(np.log(2*np.pi) + 1) + 0.5*np.log(det(C[k]))
+    return Ksum
+
+
+def calculate_ELBO(r, alpha, m, C, invSig, alpha0, m0, C0, NK, xbar, SK):
+      p1 = E_ln_p_X_given_Z_mu(m, invSig, C0, NK, xbar, SK, D=2)
+      p2 = E_ln_p_Z_given_pi(r, alpha)
+      p3 = E_ln_p_pi(alpha0, alpha)
+      p4 = E_ln_p_mu(m, C, m0, inv(C0), D=2)
+      q1 = E_ln_q_Z(r)
+      q2 = E_ln_q_pi(alpha)
+      q3 = E_ln_q_mu(C, D=2)    
+      return p1+p2+p3+p4-q1-q2-q3
