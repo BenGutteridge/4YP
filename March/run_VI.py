@@ -27,8 +27,8 @@ from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param
 K = 3                   # Initial number of mixture components
 N_its = 10              # Number of iterations of chosen update method performed
 
-update_type = 'GD'      # Using (true) gradient descent
-# update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
+# update_type = 'GD'      # Using (true) gradient descent
+update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
 
 "Define parameters of joint distribution (effectively priors on variational params)"
 alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
