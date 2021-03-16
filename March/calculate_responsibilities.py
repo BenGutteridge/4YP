@@ -6,19 +6,21 @@ Created on Wed Mar 10 16:52:55 2021
 """
 
 import numpy as np
-from numpy.linalg import inv, det, multi_dot
-from scipy.special import digamma, gammaln
+from numpy.linalg import det, multi_dot
+from scipy.special import digamma
 import sys
 
 def E_ln_pi_k(k, alpha):
+    """Bishop Eqn B.21"""
     return digamma(alpha[k]) - digamma(np.sum(alpha))
 
 def E_N_exp_k(k, m, C, invSig, xn):
-    # using modified Bishop eqn (10.64) and Matrix Cookbook eq (380)
+    """Using modified Bishop eqn (10.64) and Matrix Cookbook eq (380)"""
     v = m[k] - xn # 1x2 row vector
     return multi_dot((v, invSig, v.T)) + np.trace(np.dot(invSig, C[k]))
 
-def ln_rho_nk(k, alpha, m, C, invSig, xn, D=2):
+def calculate_ln_rho_nk(k, alpha, m, C, invSig, xn, D=2):
+    """Adapted from Bishop Eqn 10.46"""
     Elnpik = E_ln_pi_k(k,alpha)
     ## THIS BIT BELOW
     ENexpk = E_N_exp_k(k, m, C, invSig, xn)
@@ -26,15 +28,24 @@ def ln_rho_nk(k, alpha, m, C, invSig, xn, D=2):
 
 
 def r_nk(k, alpha, m, C, invSig, xn):
-    rhonk = np.exp(ln_rho_nk(k, alpha, m, C, invSig, xn, D=2))
-    sum_k_rho = 0.
-    for j in range(alpha.shape[0]):
-        ln_rhonk = ln_rho_nk(j, alpha, m, C, invSig, xn, D=2)
-        if np.isnan(ln_rhonk): 
-            print('\nln_rho_nk() returning nan')
-            print(alpha, m , C, xn)
-            sys.exit()
-        sum_k_rho = sum_k_rho + np.exp(ln_rhonk)
-    if sum_k_rho>0: 
-        return rhonk/sum_k_rho
-    else: return 0.
+    """
+    Calculates responsibility borne by each mixture component for each datapoint xn
+    Adapted from Bishop Eqn 10.49
+    """
+    try:
+        rho_nk = np.exp(calculate_ln_rho_nk(k, alpha, m, C, invSig, xn, D=2))
+        Ksum_rho_n = 0.
+        for j in range(alpha.shape[0]):
+            ln_rho_nk = calculate_ln_rho_nk(j, alpha, m, C, invSig, xn, D=2)
+            assert not np.isnan(ln_rho_nk)
+            Ksum_rho_n = Ksum_rho_n + np.exp(ln_rho_nk)
+        return rho_nk/Ksum_rho_n
+        
+    except AssertionError: 
+        # NaN error, probably due to exp overflow or ln(0)
+        print('\nln_rho_nk() returning nan')
+        print(alpha, m , C, xn)
+        sys.exit()
+    except ZeroDivisionError: 
+        # When all K components bear negligible responsibility
+        return 0.

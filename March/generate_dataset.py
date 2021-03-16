@@ -34,4 +34,4 @@ def generate_2D_dataset(N, K=2, centres=None, covs=None, weights=None):
                             multivariate_normal(mean=centres[k],
                                  cov=covs[k],
                                  size=int(N_per_cluster[k]))))
-    return X, centres, covs
+    return X, centres, covs, weights

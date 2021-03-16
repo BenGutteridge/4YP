@@ -14,9 +14,7 @@ from grad_funcs import L_grad_alpha, L_grad_m, L_grad_invC
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
 
-"""TODO: Have some sort of 'gd_schedule' arg - simple at first but can add more complexity
-query it at each iteration
-"""
+
 class JointDistribution:
     def __init__(self, alpha, mean, covariance=None, precision=None):
         """
@@ -83,10 +81,8 @@ class VariationalDistribution:
     """
     ALPHA_LB = 0.1
 
-    def __init__(self, initial_responsibilities, inv_sigma, update_type,
-                 step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-4}):
+    def __init__(self, initial_responsibilities, inv_sigma, update_type, gd_schedule):
         self.update_type = update_type
-        self.step_sizes = step_sizes
 
         self.responsibilities = initial_responsibilities
 
@@ -102,6 +98,16 @@ class VariationalDistribution:
         self.xbar = np.zeros((self.K,self.D))
         self.SK = np.zeros((self.K,self.D,self.D))
         
+        self.gd_schedule = gd_schedule
+        
+    def initialise_params(self, init_alpha=10):
+        """Initialise variational params before GD (or other) updates"""
+        self.alpha = np.ones(self.K)*init_alpha
+        self.means = 2*np.random.rand(self.K,self.D) - 1
+        self.covariances = np.array([np.eye(2) for _ in range(self.K)])
+        self.update_precisions_from_covariances()
+
+    
     def calculate_weighted_statistics(self, X):
         """
         Calculates frequently used statistics of the responsibilities and the
@@ -124,35 +130,48 @@ class VariationalDistribution:
             self.SK[k] = S_k(self.NK[k], r[:,k], X, self.xbar[k])   # Eqn 10.53
 
     def M_step(self, X, joint):
+        """
+        Undertakes M-step, optimising ELBO by updating variational params.
+        Uses attribute 'update_type' to pass onto daughter M-step methods
+        for different kinds of updates, CAVI, GD (minibatches TBA)
+        """
         if self.update_type == "CAVI":
             self._M_step_CAVI(X, joint)
-        elif self.update_type == "GD":
+        elif self.update_type.startswith("GD"):
             self._M_step_GD(X, joint)
 
     def _M_step_CAVI(self, X, joint):
+        """CAVI updates. Modified from Bishop Eqns 10.58-62"""
         self.calculate_weighted_statistics(X)
 
         for k in range(self.K):
-            # TODO: rename, get rid of _k everywhere
-            self.alpha[k] = update_alpha(self.NK[k], joint.alpha)
+            self.alpha[k] = update_alpha(self.NK[k], joint.alpha)   # = Eqn 10.58
             self.means[k], self.precisions[k] = \
                 update_means_precisions(self.NK[k], self.xbar[k], joint.mean, joint.precision, self.inv_sigma)
-            self.covariances[k] = inv(self.precisions[k])
+            self.covariances[k] = inv(self.precisions[k])           # ~ Eqn 10.61
             
     def _M_step_GD(self, X, joint):
-        # performing GD update for M step rather than CAVI update equations
+        """
+        Generate gradients of ELBO wrt variational params and take GD steps.
+        """
         self.calculate_weighted_statistics(X)
-
-        # TODO: consider putting gradient step stuff in two separate methods, one for computing the updates and one for
-        # applying the updates
-
-        # Compute gradient updates
-        # TODO: point to equation in Bishop or elsewhere whenever you've just reproduced something
-        self.d_alpha = L_grad_alpha(joint.alpha, self.alpha, self.NK)
+        self.step_sizes = self.gd_schedule()  # TODO: sort this
+        self._calculate_gradient_updates(joint)
+        self._apply_gradient_updates()
+        
+    def _calculate_gradient_updates(self, joint):
+        """ 
+        Compute gradient updates
+        Adapted from Xie VI tutorial Eqns 76, 60/82/85 and 
+        PRML solution manual Problem 10.18 
+        """
+        self.d_alpha = L_grad_alpha(joint.alpha, self.alpha, self.NK) # Xie Eqn 76
         self.d_m = L_grad_m(self.means, joint.mean, joint.precision, self.inv_sigma, self.NK, self.xbar)
         self.d_invC = L_grad_invC(self.means, self.precisions, self.inv_sigma, joint.precision, self.NK)
 
-        # Apply gradient updates
+    def _apply_gradient_updates(self):
+        """Applying gradient step updates using calculated gradients and
+        step schedule from self.gd_schedule"""
         for k in range(self.K): 
             # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
             self.alpha[k] = np.max((self.ALPHA_LB, self.alpha[k] + (self.d_alpha[k]*self.step_sizes['alpha'])))
@@ -160,14 +179,21 @@ class VariationalDistribution:
             self.precisions[k] = self.precisions[k] + self.d_invC[k]*self.step_sizes['invC']
             self.covariances[k] = inv(self.precisions[k])
 
-    # TODO: insert bishop ref for r_nk - maybe clean it up a little bit (later)? Looks opaque
     def E_step(self, X):
+        """
+        Undertakes E-step, optimising ELBO by updating variational param
+        responsibility of latent variables Z.
+        Uses Eqn 10.49 (and 10.46) from Bishop
+        """
         N = X.shape[0]
         for k in range(self.K):
             if self.alpha[k] <= self.ALPHA_LB:
-                self.responsibilities[:, k] = np.zeros(N) # fix?
+                """Prevents functions of alpha in ELBO calculation going to 
+                infinity as alpha_k->0"""
+                self.responsibilities[:, k] = np.zeros(N)
             else:
                 for n in range(N):
+                    # Eqn 10.49
                     self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
                     
     def E_step_minibatch(self, X, alpha_lb=0.1):
@@ -175,12 +201,16 @@ class VariationalDistribution:
         pass
 
     def perturb_variational_params(self, non_diag=False):
-        # fill in
+        # not necessary for the time being
         pass
                     
-    def update_precision_from_covariance(self):
+    def update_precisions_from_covariances(self):
         for k in range(self.K):
             self.precisions[k] = inv(self.covariances[k])
+        
+    def calculate_mixing_coefficients(self):
+        # E[pi_k], Bishop Eqn B.17
+        self.mixing_coefficients = self.alpha/np.sum(self.alpha)
             
     def calculate_ELBO(self, joint):
         """Based on equation 10.70-10.77 from Bishop, with some modifications due to our fixed covariance."""

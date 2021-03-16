@@ -51,11 +51,10 @@ class HiddenPrints:
         sys.stdout.close()
         sys.stdout = self._original_stdout
         
-# Expected value of pi for plotting ellipses, relative weights, used for transparency
-def E_pi(alpha, alpha0, N):
-    K = alpha.shape[0]
-    return [(alpha[k])/(K*alpha0 + N) for k in range(K)]
-
+# Expected value of mixture coefficients pi_k 
+# for plotting ellipses, relative weights, used for transparency
+def E_pi(alpha):
+    return alpha/np.sum(alpha)
 
 def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=[-5,10,-5,15]):
     plt.figure()
@@ -67,11 +66,12 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     legend = ['Datapoints']
     
     for k in range(K):
-        if np.sum(mu[k] == np.zeros(2)) == 0:
-            plt.plot(mu[k][0],mu[k][1],'ro')
-            plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
+        if pi[k] > 1e-3:
+            plt.plot(mu[k][0],mu[k][1],'o')
         else: 
-            plt.plot(0,0,'kX')
+            plt.plot(mu[k][0],mu[k][1],'X')
+        # plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
+        legend.append('k=%d'%k)
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])
@@ -89,10 +89,10 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     # legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
     # legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
     plt.title(title)
+    plt.legend(legend)
     if isinstance(savefigpath, str):
         plt.savefig(savefigpath)
     else:
-        plt.legend(legend)
         plt.show()
     
 
