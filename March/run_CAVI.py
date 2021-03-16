@@ -95,6 +95,11 @@ class VariationalDistribution:
                 for n in range(N):
                     self.responsibilities[n,k] = r_nk(k, self.alpha, self.means, self.covariances, inv_sigma, X[n])
                     
+    def E_step_minibatch(self, X, inv_sigma, alpha_lb=0.1):
+        # xn = X[np.random.randint(X.shape[0])]
+        pass
+          
+
     def perturb_variational_params(self, non_diag=False):
         # fill in
         pass
@@ -102,6 +107,7 @@ class VariationalDistribution:
     def update_precision_from_covariance(self):
         for k in range(self.K):
             self.precisions[k] = inv(self.covariances[k])
+            
             
 
 # "priors"
