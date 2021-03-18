@@ -19,16 +19,16 @@ plt.ioff()
 
 from distribution_classes import JointDistribution, VariationalDistribution
 from generate_dataset import generate_2D_dataset
-from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param
+from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, plot_K_covs, plot_cov_ellipses_gif
 
 # %% Misc setup
 
 "Iterations and update_type"
-K = 3                   # Initial number of mixture components
-N_its = 10              # Number of iterations of chosen update method performed
+K = 4                   # Initial number of mixture components
+N_its = 50              # Number of iterations of chosen update method performed
 
-# update_type = 'GD'      # Using (true) gradient descent
-update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
+update_type = 'GD'      # Using (true) gradient descent
+# update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
 
 "Define parameters of joint distribution (effectively priors on variational params)"
 alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
@@ -38,14 +38,14 @@ sigma = inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian compone
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 100
-num_clusters = 2
+N = 300
+num_clusters = 3
 X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters, 
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
 
 "Schedule for step sizes in GD (constant at the moment)"
-def gd_schedule(step_sizes={'alpha': 1.0, 'm': 1e-2, 'invC': 1e-4}):
+def gd_schedule(step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3}):
     # TODO: fill in with a proper schedule
     return step_sizes
 
@@ -83,19 +83,27 @@ for i in tqdm(range(N_its)):
     
 # %% Saving animation, plotting ELBO/other key params
 
-# Make and display gif 
+"Make and display gif of mixture model over time" 
 gifname = make_gif(filedir, gifdir)
 # Empty plots directory for next run
 for file in os.listdir(filedir):
   os.remove(os.path.join(filedir,file))
   
-# xtracting from memory and plotting salient params
+"extracting from memory, and plotting, salient params"
 plt.close('all')
 ELBOs = np.array([variational_memory[n].ELBO for n in range(1,N_its)])
 alphas = np.array([variational_memory[n].alpha for n in range(N_its)])
 mixing_coefficients = np.array([variational_memory[n].mixing_coefficients for n in range(1,N_its)])
+varx = np.array([variational_memory[n].covariances[:,0,0] for n in range(N_its)])
+vary = np.array([variational_memory[n].covariances[:,1,1] for n in range(N_its)])
+covxy = np.array([variational_memory[n].covariances[:,1,0] for n in range(N_its)])
 
 plot_1D_param(ELBOs.reshape(-1,1), 'ELBO', 1)
 plot_1D_param(alphas, 'alphas', K)
 plot_1D_param(mixing_coefficients, 'Mixing coefficients (E[pi_k])', K)
+plot_K_covs(varx,vary,covxy,K)
 plt.show()
+
+"""Makes animation showing the ellipses for the distribution of 
+\mu_k ~ N{\mu_k|m_k, C_k} over time"""
+plot_cov_ellipses_gif(variational_memory, N_its, K, gifname=' --- Mu distribution')

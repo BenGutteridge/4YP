@@ -21,8 +21,8 @@ import warnings
 import matplotlib.cbook
 warnings.filterwarnings("ignore",category=matplotlib.cbook.mplDeprecation)
 
-def make_gif(filedir, gifdir):
-  gifname = str(datetime.datetime.now())[:-7].replace(':',';')
+def make_gif(filedir, gifdir, gifname=''):
+  gifname = str(datetime.datetime.now())[:-7].replace(':',';') + gifname
   with imageio.get_writer(gifdir+'/'+gifname+'.gif', mode='I') as writer:
       for filename in sorted(os.listdir(filedir)):
           image = imageio.imread(os.path.join(filedir,filename))
@@ -121,12 +121,53 @@ def plot_1D_phi(phis, title, K):
 def plot_K_covs(varx,vary,covxy,K):
     legends = []
     for k in range(K):
-      plt.figure()
-      plt.plot(varx[:,k].T, 'r')
-      plt.plot(vary[:,k].T, 'b')
-      plt.plot(covxy[:,k].T, 'g')
-      legends += ['var_x', 'var_y', 'cov_xy']
-      plt.legend(legends)
-      plt.title('Covariance matrix k=%d'%k)
-      plt.xlabel('Iterations')
+        plt.figure()
+        plt.plot(varx[:,k].T, 'r')
+        plt.plot(vary[:,k].T, 'b')
+        plt.plot(covxy[:,k].T, 'g')
+        legends += ['var_x', 'var_y', 'cov_xy']
+        plt.legend(legends)
+        plt.title('Covariance matrix k=%d'%k)
+        plt.xlabel('Iterations')
+        
+def plot_cov_ellipses_gif(variational_memory, N_its, K, gifname, xylims=[-5,10,-5,15], savefigpath='plots'):
+    for n in range(1,N_its):
+        legend = []
+        mean = variational_memory[n].means
+        cov = variational_memory[n].covariances
+        weight = variational_memory[n].mixing_coefficients
+        
+        plt.figure()
+        plt.title('Iteration %d'%n)
+        if xylims != None:
+            plt.xlim(xylims[0],xylims[1])
+            plt.ylim(xylims[2],xylims[3])
+       
+        for k in range(K):
+            if weight[k] > 1e-3:
+                plt.plot(mean[k][0],mean[k][1],'o')
+            else: 
+                plt.plot(mean[k][0],mean[k][1],'X')
+            # plt.text(mean[k][0],mean[k][1], 'k=%d'%k)
+            legend.append('k=%d'%k)
+            ell = draw_ellipse(mean[k], cov[k])
+            ell.set_alpha(weight[k])
+            # ell.set_edgecolor('m')
+            ell.set_fill(True)
+            splot = plt.subplot(1, 1, 1)
+            splot.add_artist(ell)
+        
+        plt.legend(legend)
+        if isinstance(savefigpath, str):
+            plt.savefig(os.path.join(savefigpath, '%04d.png'%n))
+        else:
+            plt.show()
+    make_gif(filedir=savefigpath, gifdir='gifs', gifname=gifname)
+    
+    for file in os.listdir(savefigpath):
+        os.remove(os.path.join(savefigpath,file))
+    
+    
+           
+      
         		

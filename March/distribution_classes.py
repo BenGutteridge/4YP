@@ -10,7 +10,7 @@ from numpy.linalg import inv
 from statistics_of_observed_data import N_k, x_k_bar, S_k
 from CAVI_updates import alpha_k as update_alpha, m_invC_k as update_means_precisions
 from calculate_responsibilities import r_nk
-from grad_funcs import L_grad_alpha, L_grad_m, L_grad_invC
+from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
 
@@ -167,7 +167,7 @@ class VariationalDistribution:
         """
         self.d_alpha = L_grad_alpha(joint.alpha, self.alpha, self.NK) # Xie Eqn 76
         self.d_m = L_grad_m(self.means, joint.mean, joint.precision, self.inv_sigma, self.NK, self.xbar)
-        self.d_invC = L_grad_invC(self.means, self.precisions, self.inv_sigma, joint.precision, self.NK)
+        self.d_C = L_grad_C(self.precisions, self.inv_sigma, joint.precision, self.NK)
 
     def _apply_gradient_updates(self):
         """Applying gradient step updates using calculated gradients and
@@ -176,8 +176,8 @@ class VariationalDistribution:
             # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
             self.alpha[k] = np.max((self.ALPHA_LB, self.alpha[k] + (self.d_alpha[k]*self.step_sizes['alpha'])))
             self.means[k] = self.means[k] + self.d_m[k]*self.step_sizes['m']
-            self.precisions[k] = self.precisions[k] + self.d_invC[k]*self.step_sizes['invC']
-            self.covariances[k] = inv(self.precisions[k])
+            self.covariances[k] = self.covariances[k] + self.d_C[k]*self.step_sizes['C']
+            self.precisions[k] = inv(self.covariances[k])
 
     def E_step(self, X):
         """

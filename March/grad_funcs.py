@@ -27,14 +27,23 @@ def L_grad_m(m, m0, invC0, invSig, NK, xbar):
         d_m.append((-a-b).reshape(2,))
     return d_m
 
-def L_grad_invC(m, invC, invSig, invC0, NK):
-    K, d_C = len(invC), []
+# # Based on Xie and exponential family stuff - needs another look
+# def L_grad_invC(m, invC, invSig, invC0, NK):
+#     K, d_C = len(invC), []
+#     for k in range(K):
+#         m[k].reshape(2,1)
+#         log_norm = 0.5*multi_dot((m[k].T, invC[k], m[k])) - 0.5*np.log(det(invC[k]))
+#         natural_grad = 0.25*(invC0 + NK[k]*invSig - invC[k]) 
+#         d_C.append(log_norm*natural_grad)
+#     return d_C
+
+def L_grad_C(invC, invSig, invC0, NK):
+    D, K = invSig.shape[0], len(invC)
+    d_C = np.zeros((K,D,D))
     for k in range(K):
-        m[k].reshape(2,1)
-        log_norm = 0.5*multi_dot((m[k].T, invC[k], m[k])) - 0.5*np.log(det(invC[k]))
-        natural_grad = 0.25*(invC0 + NK[k]*invSig - invC[k]) 
-        d_C.append(log_norm*natural_grad)
+        d_C[k] = 0.5*(invC[k] - NK[k]*invSig - invC0)
     return d_C
+    
 
 
 # # cavi update for W, needed for calculating gradient of ELBO wrt Wk
