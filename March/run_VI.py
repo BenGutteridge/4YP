@@ -24,29 +24,36 @@ from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, p
 # %% Misc setup
 
 "Iterations and update_type"
-K = 4                   # Initial number of mixture components
-N_its = 50              # Number of iterations of chosen update method performed
+K = 9                   # Initial number of mixture components
+N_its = 100              # Number of iterations of chosen update method performed
 
 update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
 
 "Define parameters of joint distribution (effectively priors on variational params)"
-alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
+alpha_0 = 1e-1      # Dirichlet prior p(pi) = Dir(pi|alpha0)
 m_0 = np.zeros(2)   # Gaussian prior p(mu) = N(mu|m0, C0)
 C_0 = np.eye(2)     # Covariance of prior mu
 sigma = inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components 
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 300
-num_clusters = 3
-X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters, 
+N = 960
+num_clusters = 6
+X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
 
-"Schedule for step sizes in GD (constant at the moment)"
-def gd_schedule(step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3}):
-    # TODO: fill in with a proper schedule
+"""Schedule for step sizes in GD. Constant by default (no t input) or a decaying
+step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
+info is forgotten, delay >= 0 and downweights early iterations."""
+def gd_schedule(t=None, delay=1., forgetting=0.5, step_sizes={'alpha': 1.0, 
+                                                         'm': 1e-2, 
+                                                         'C': 1e-3}):
+    if t is not None:
+        rho_t = (t + delay)**(-forgetting) # Eq 26, Hoffman SVI
+        for key in step_sizes:
+            step_sizes[key] *= rho_t 
     return step_sizes
 
 "Initialising params and instantiating distributions"
@@ -57,6 +64,8 @@ variational = VariationalDistribution(initial_responsibilities,
                                       inv_sigma, update_type, gd_schedule)
 joint = JointDistribution(alpha_0, m_0, covariance=C_0)
 variational.initialise_params()
+for k in range(K):
+    variational.means[k] += np.array([4.,15.])
 
 "For plotting"
 variational_memory = []
@@ -101,9 +110,12 @@ covxy = np.array([variational_memory[n].covariances[:,1,0] for n in range(N_its)
 plot_1D_param(ELBOs.reshape(-1,1), 'ELBO', 1)
 plot_1D_param(alphas, 'alphas', K)
 plot_1D_param(mixing_coefficients, 'Mixing coefficients (E[pi_k])', K)
-plot_K_covs(varx,vary,covxy,K)
+# plot_K_covs(varx,vary,covxy,K)
 plt.show()
+
+# if update_type == 'GD':
+#     d_means_mag = np.array([variational_memory[n].means for n in range(1,N_its)])
 
 """Makes animation showing the ellipses for the distribution of 
 \mu_k ~ N{\mu_k|m_k, C_k} over time"""
-plot_cov_ellipses_gif(variational_memory, N_its, K, gifname=' --- Mu distribution')
+# plot_cov_ellipses_gif(variational_memory, N_its, K, gifname=' --- Mu distribution')

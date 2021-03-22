@@ -21,17 +21,17 @@ plt.ioff()
 
 # Dataset and update params
 N_its = 100
-N = 100
-K = 5
+N = 1000
+K = 8
 D = 2
 
-N_clusters = 2
+N_clusters = 5
 # centres = [np.array([1,8]), np.array([6,5])]
 # covs = [np.eye(2), np.eye(2)]
 weights = np.array([0.5,0.5])
-X, centres, covs = generate_2D_dataset(N, K=N_clusters, 
+X, centres, covs, weights = generate_2D_dataset(N, K=N_clusters, 
                                        # centres=centres, covs=covs,
-                                       weights=weights,
+                                       # weights=weights,
                                        )
 
 # Variational priors
@@ -69,7 +69,7 @@ alpha, m, C = perturb_variational_params(
 ELBO, ELBO_M, ELBO_E = np.empty(2*N_its), np.empty(N_its), np.empty(N_its)
 for i in tqdm(range(N_its)):
     # Plot
-    Epi = E_pi(alpha, alpha0, N)
+    Epi = E_pi(alpha)
     title = 'GD: iteration %d' % i
     filename = 'plots/img%04d.png'%i
     plot_GMM(X, m, KinvSig, Epi, centres, covs, K, title, savefigpath=filename)
