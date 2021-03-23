@@ -21,25 +21,29 @@ from distribution_classes import JointDistribution, VariationalDistribution
 from generate_dataset import generate_2D_dataset
 from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, plot_K_covs, plot_cov_ellipses_gif
 
+np.random.seed(42)
+
 # %% Misc setup
 
 "Iterations and update_type"
-K = 9                   # Initial number of mixture components
-N_its = 100              # Number of iterations of chosen update method performed
+K = 5                   # Initial number of mixture components
+N_its = 20             # Number of iterations of chosen update method performed
 
-update_type = 'GD'      # Using (true) gradient descent
+# update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
+update_type = 'SGD'
+minibatch_size = 120
 
 "Define parameters of joint distribution (effectively priors on variational params)"
-alpha_0 = 1e-1      # Dirichlet prior p(pi) = Dir(pi|alpha0)
+alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
 m_0 = np.zeros(2)   # Gaussian prior p(mu) = N(mu|m0, C0)
 C_0 = np.eye(2)     # Covariance of prior mu
 sigma = inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components 
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 960
-num_clusters = 6
+N = 120
+num_clusters = 3
 X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
@@ -47,25 +51,31 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
 """Schedule for step sizes in GD. Constant by default (no t input) or a decaying
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
 info is forgotten, delay >= 0 and downweights early iterations."""
-def gd_schedule(t=None, delay=1., forgetting=0.5, step_sizes={'alpha': 1.0, 
+def gd_schedule(t=None, scale=2., delay=1., forgetting=0.5, step_sizes={'alpha': 1.0, 
                                                          'm': 1e-2, 
                                                          'C': 1e-3}):
     if t is not None:
-        rho_t = (t + delay)**(-forgetting) # Eq 26, Hoffman SVI
+        rho_t = scale*(t + delay)**(-forgetting) # Eq 26, Hoffman SVI
         for key in step_sizes:
             step_sizes[key] *= rho_t 
+    # print('rho_t = ', rho_t)
     return step_sizes
 
 "Initialising params and instantiating distributions"
 # TODO: could we move this into VariationalDistribution? Should we avoid dependence on N?
-initial_responsibilities = np.random.dirichlet(np.ones(K), N)  # Size (N, K)
+
+if update_type=='SGD':
+    initial_responsibilities = np.random.dirichlet(np.ones(K), minibatch_size)
+else:
+    initial_responsibilities = np.random.dirichlet(np.ones(K), N)
 
 variational = VariationalDistribution(initial_responsibilities, 
                                       inv_sigma, update_type, gd_schedule)
 joint = JointDistribution(alpha_0, m_0, covariance=C_0)
 variational.initialise_params()
-for k in range(K):
-    variational.means[k] += np.array([4.,15.])
+
+# for k in range(K):
+#     variational.means[k] += np.array([4.,15.])
 
 "For plotting"
 variational_memory = []
@@ -79,13 +89,16 @@ for i in tqdm(range(N_its)):
     # Save copy of class with all current params for plotting etc
     variational_memory.append(deepcopy(variational))
     
-    # EM steps, calculate ELBO
-    variational.M_step(X, joint)
-    variational.E_step(X)
+    samples = np.arange(N) # np.random.randint(N, size=minibatch_size)
+    
+    # # EM steps, calculate ELBO
+    variational.M_step(X, joint, samples, t=i)
+    variational.E_step(X, samples)
+    variational.calculate_weighted_statistics(X)
     variational.calculate_ELBO(joint)
     
     # Plotting stuff
-    title = '(Class) %s: Iteration %d -- ELBO = %7.0f'%(variational.update_type, i, variational.ELBO)
+    title = '%s: Iteration %d -- ELBO = %7.0f'%(variational.update_type, i, variational.ELBO)
     filename = 'plots/img%04d.png'%i
     variational.calculate_mixing_coefficients()
     plot_GMM(X, variational.means, K_inv_sigma, variational.mixing_coefficients, centres, covs, K, title, savefigpath=filename)

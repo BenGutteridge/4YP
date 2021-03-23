@@ -14,6 +14,7 @@ from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
 
+np.random.seed(42)
 
 class JointDistribution:
     def __init__(self, alpha, mean, covariance=None, precision=None):
@@ -129,7 +130,7 @@ class VariationalDistribution:
             self.xbar[k] = x_k_bar(self.NK[k], r[:,k], X)           # Eqn 10.52
             self.SK[k] = S_k(self.NK[k], r[:,k], X, self.xbar[k])   # Eqn 10.53
 
-    def M_step(self, X, joint):
+    def M_step(self, X, joint, sample=None, t=None):
         """
         Undertakes M-step, optimising ELBO by updating variational params.
         Uses attribute 'update_type' to pass onto daughter M-step methods
@@ -138,7 +139,9 @@ class VariationalDistribution:
         if self.update_type == "CAVI":
             self._M_step_CAVI(X, joint)
         elif self.update_type.startswith("GD"):
-            self._M_step_GD(X, joint)
+            self._M_step_GD(X, joint, t)
+        elif self.update_type == "SGD":
+            self._M_step_SGD(X, joint, sample, t)
 
     def _M_step_CAVI(self, X, joint):
         """CAVI updates. Modified from Bishop Eqns 10.58-62"""
@@ -150,14 +153,45 @@ class VariationalDistribution:
                 update_means_precisions(self.NK[k], self.xbar[k], joint.mean, joint.precision, self.inv_sigma)
             self.covariances[k] = inv(self.precisions[k])           # ~ Eqn 10.61
             
-    def _M_step_GD(self, X, joint):
+    def _M_step_GD(self, X, joint, t):
         """
         Generate gradients of ELBO wrt variational params and take GD steps.
         """
         self.calculate_weighted_statistics(X)
-        self.step_sizes = self.gd_schedule()  # TODO: sort this
+        self.step_sizes = self.gd_schedule(t)  # TODO: sort this
         self._calculate_gradient_updates(joint)
         self._apply_gradient_updates()
+        
+    def _M_step_SGD(self, X, joint, samples, t):
+        """
+        Generate unbiased noisy estimates of gradient using a minibatching,
+        each gradient calculated independently with an artificial dataset of
+        minibatch point xi repeated N times. Gradients are averaged over the
+        minibatch, weighted by the step size, and added to
+        """
+        N = X.shape[0]
+        S = samples.shape[0]
+        d_alpha, d_m, d_C = [], [], []
+        self.step_sizes = self.gd_schedule(t)
+        
+        # Calculate SGD (single-sample) update steps for each sample in S
+        for i in range(S):
+            N_r_nk = np.array([N*self.responsibilities[i,k] for k in range(self.K)])
+            xbar = np.array([X[samples[i]] for _ in range(self.K)])
+            d_alpha.append(L_grad_alpha(joint.alpha, self.alpha, N_r_nk))
+            d_m.append(L_grad_m(self.means, joint.mean, joint.precision, self.inv_sigma, N_r_nk, xbar))
+            d_C.append(L_grad_C(self.precisions, self.inv_sigma, joint.precision, N_r_nk))
+        
+        # Average SGD updates, weight by step size, and add to update variational params 
+        d_alpha, d_m, d_C = np.array(d_alpha), np.array(d_m), np.array(d_C)
+        sum_d_alpha = np.sum(d_alpha, axis=0)
+        sum_d_m = np.sum(d_m, axis=0)
+        sum_d_C = np.sum(d_C, axis=0)
+        self.alpha += (1/S) * self.step_sizes['alpha'] * sum_d_alpha
+        self.alpha = np.maximum(self.alpha, self.ALPHA_LB * np.ones(self.K)) # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
+        self.means += (1/S) * self.step_sizes['m'] * sum_d_m
+        self.covariances += (1/S) * self.step_sizes['C'] * sum_d_C
+        self.update_precisions_from_covariances()
         
     def _calculate_gradient_updates(self, joint):
         """ 
@@ -179,11 +213,22 @@ class VariationalDistribution:
             self.covariances[k] = self.covariances[k] + self.d_C[k]*self.step_sizes['C']
             self.precisions[k] = inv(self.covariances[k])
 
-    def E_step(self, X):
+    
+    def E_step(self, X, samples=None):
         """
         Undertakes E-step, optimising ELBO by updating variational param
         responsibility of latent variables Z.
         Uses Eqn 10.49 (and 10.46) from Bishop
+        """
+        if self.update_type == 'SGD':
+            self.E_step_SGD(X, samples)
+        else:
+            self.E_step_batch(X)
+
+
+    def E_step_batch(self, X):
+        """
+        Update responsibilities of entire dataset
         """
         N = X.shape[0]
         for k in range(self.K):
@@ -195,10 +240,50 @@ class VariationalDistribution:
                 for n in range(N):
                     # Eqn 10.49
                     self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
+      
                     
-    def E_step_minibatch(self, X, alpha_lb=0.1):
-        # xn = X[np.random.randint(X.shape[0])]
-        pass
+    def E_step_single_sample(self, X, sample):
+        """
+        Updates the responsibility only of the single sampled point
+        """
+        for k in range(self.K):
+            if self.alpha[k] <= self.ALPHA_LB:
+                """Prevents functions of alpha in ELBO calculation going to 
+                infinity as alpha_k->0"""
+                self.responsibilities[:, k] = 0
+            else:
+                self.responsibilities[:, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[sample])
+ 
+    def E_step_SGD(self, X, samples):
+        """
+        Updates the responsibility only of the single sampled point 
+        """
+        for i in range(samples.shape[0]):
+            for k in range(self.K):
+                if self.alpha[k] <= self.ALPHA_LB:
+                    """Prevents functions of alpha in ELBO calculation going to 
+                    infinity as alpha_k->0"""
+                    self.responsibilities[:, k] = 0
+                else:
+                    self.responsibilities[i, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
+                     
+
+    # def minibatch_update(self,joint, X, minibatch_size=1):
+    #     N = X.shape[0]
+    #     # 1. Choose random minibatch
+    #     S = X[np.random.choice(X.shape[0], minibatch_size, replace=False)]
+    #     # 2. Update variational parameters
+    #     for k in range(self.K):  
+    #         alpha = 0.
+    #         C = np.zeros((self.D, self.D))
+    #         for i in range(minibatch_size):
+    #             alpha += (joint.alpha + N * self.responsibilities[i,k] - self.alpha[k]) 
+    #             invC += (self.precisions[k] - joint.precision - N * self.inv_sigma * self.responsibilities[i,k]
+    #         alpha = alpha * (step_size['alpha']/minibatch_size)
+    #         self.alpha[k] += alpha
+        
+
+        
 
     def perturb_variational_params(self, non_diag=False):
         # not necessary for the time being

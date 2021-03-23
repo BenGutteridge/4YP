@@ -9,6 +9,8 @@ Generate 2D dataset
 import numpy as np
 from numpy.random import multivariate_normal
 
+# Same dataset each time
+np.random.seed(42)
 
 def generate_2D_dataset(N, K=2, centres=None, covs=None, weights=None):
     # default

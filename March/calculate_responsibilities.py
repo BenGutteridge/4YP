@@ -39,7 +39,10 @@ def r_nk(k, alpha, m, C, invSig, xn):
             ln_rho_nk = calculate_ln_rho_nk(j, alpha, m, C, invSig, xn, D=2)
             assert not np.isnan(ln_rho_nk)
             Ksum_rho_n = Ksum_rho_n + np.exp(ln_rho_nk)
-        return rho_nk/Ksum_rho_n
+            r_nk = float(rho_nk)/float(Ksum_rho_n)
+            if np.isnan(r_nk): 
+                print('\nrho_nk: ', rho_nk, '\nKsum_rho_n: ', Ksum_rho_n)
+        return r_nk
         
     except AssertionError: 
         # NaN error, probably due to exp overflow or ln(0)
