@@ -20,9 +20,11 @@ def E_N_exp_k(k, m, C, invSig, xn):
     return multi_dot((v, invSig, v.T)) + np.trace(np.dot(invSig, C[k]))
 
 def calculate_ln_rho_nk(k, alpha, m, C, invSig, xn, D=2):
-    """Adapted from Bishop Eqn 10.46"""
+    """
+    Adapted from Bishop Eqn 10.46
+    Also Xie Eqs 87/88, 100
+    """
     Elnpik = E_ln_pi_k(k,alpha)
-    ## THIS BIT BELOW
     ENexpk = E_N_exp_k(k, m, C, invSig, xn)
     return Elnpik + 0.5*det(invSig) - 0.5*D*np.log(2*np.pi) - 0.5*ENexpk
 
@@ -39,14 +41,13 @@ def r_nk(k, alpha, m, C, invSig, xn):
             ln_rho_nk = calculate_ln_rho_nk(j, alpha, m, C, invSig, xn, D=2)
             assert not np.isnan(ln_rho_nk)
             Ksum_rho_n = Ksum_rho_n + np.exp(ln_rho_nk)
-            r_nk = float(rho_nk)/float(Ksum_rho_n)
-            if np.isnan(r_nk): 
-                print('\nrho_nk: ', rho_nk, '\nKsum_rho_n: ', Ksum_rho_n)
+        r_nk = float(rho_nk)/float(Ksum_rho_n)
+        assert not np.isnan(r_nk)
         return r_nk
         
     except AssertionError: 
         # NaN error, probably due to exp overflow or ln(0)
-        print('\nln_rho_nk() returning nan')
+        print('\nln_rho_nk() or r_nk returning nan\n')
         print(alpha, m , C, xn)
         sys.exit()
     except ZeroDivisionError: 

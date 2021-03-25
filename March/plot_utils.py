@@ -21,6 +21,9 @@ import warnings
 import matplotlib.cbook
 warnings.filterwarnings("ignore",category=matplotlib.cbook.mplDeprecation)
 
+cols = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
+        '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
 def make_gif(filedir, gifdir, gifname=''):
   gifname = str(datetime.datetime.now())[:-7].replace(':',';') + gifname
   with imageio.get_writer(gifdir+'/'+gifname+'.gif', mode='I') as writer:
@@ -56,7 +59,7 @@ class HiddenPrints:
 def E_pi(alpha):
     return alpha/np.sum(alpha)
 
-def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=[-5,10,-5,15]):
+def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=[-5,10,-5,15], cols=cols):
     plt.figure()
     if xylims != None:
         plt.xlim(xylims[0],xylims[1])
@@ -67,9 +70,9 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     
     for k in range(K):
         if pi[k] > 1e-3:
-            plt.plot(mu[k][0],mu[k][1],'o')
+            plt.plot(mu[k][0], mu[k][1], cols[k], marker='o', linestyle=None)
         else: 
-            plt.plot(mu[k][0],mu[k][1],'X')
+            plt.plot(mu[k][0], mu[k][1], cols[k], marker='X', linestyle=None)
         # plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
         legend.append('k=%d'%k)
         cov = inv(lam[k])

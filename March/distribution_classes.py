@@ -7,6 +7,7 @@ Created on Tue Mar 16 14:09:34 2021
 
 import numpy as np
 from numpy.linalg import inv
+from copy import copy
 from statistics_of_observed_data import N_k, x_k_bar, S_k
 from CAVI_updates import alpha_k as update_alpha, m_invC_k as update_means_precisions
 from calculate_responsibilities import r_nk
@@ -130,7 +131,7 @@ class VariationalDistribution:
             self.xbar[k] = x_k_bar(self.NK[k], r[:,k], X)           # Eqn 10.52
             self.SK[k] = S_k(self.NK[k], r[:,k], X, self.xbar[k])   # Eqn 10.53
 
-    def M_step(self, X, joint, sample=None, t=None):
+    def M_step(self, X, joint, samples=None, t=None):
         """
         Undertakes M-step, optimising ELBO by updating variational params.
         Uses attribute 'update_type' to pass onto daughter M-step methods
@@ -138,10 +139,12 @@ class VariationalDistribution:
         """
         if self.update_type == "CAVI":
             self._M_step_CAVI(X, joint)
-        elif self.update_type.startswith("GD"):
+        elif self.update_type == "GD":
             self._M_step_GD(X, joint, t)
         elif self.update_type == "SGD":
-            self._M_step_SGD(X, joint, sample, t)
+            self._M_step_SGD(X, joint, samples, t)
+        elif self.update_type == "SNGD":
+            self._M_step_SGD(X, joint, samples, t)
 
     def _M_step_CAVI(self, X, joint):
         """CAVI updates. Modified from Bishop Eqns 10.58-62"""
@@ -153,6 +156,45 @@ class VariationalDistribution:
                 update_means_precisions(self.NK[k], self.xbar[k], joint.mean, joint.precision, self.inv_sigma)
             self.covariances[k] = inv(self.precisions[k])           # ~ Eqn 10.61
             
+    def _M_step_SNGD(self, X, joint, samples, t):
+        """
+        stochastic natural gradient descent, using the fact that NGD is 
+        equivalent to CAVI updates with a step size of 1
+        
+        TODO: write this using the natural param lambda, as in Xie
+        """
+        N, S = X.shape[0], samples.shape[0]
+        nat_grad_alpha = np.zeros(S, self.K)
+        nat_grad_lam1 = np.zeros((S, self.K, self.D))
+        nat_grad_lam2 = np.zeros((S, self.K, self.D, self.D))
+        lam1 = np.array([np.dot(self.means[k], self.precisions[k]) for k in range(self.K)]) # (K,D)
+        lam2 = np.array([-0.5*self.covariances[k] for k in range(self.K)])                  # (K,D,D)
+        
+        # Calculate natural gradients for each sample
+        for i in range(samples.shape[0]):
+            N_r_nk = np.array([N*self.responsibilities[samples[i],k] for k in range(self.K)])
+            xbar = np.array([X[samples[i]] for _ in range(self.K)])
+            
+            nat_grad_alpha[i] = (update_alpha(N_r_nk, joint.alpha) - self.alpha)
+            for k in range(self.K):
+                nat_grad_lam1[i,k] = np.dot(joint.mean, joint.precision) + N_r_nk[k]*np.dot(xbar[k], self.inv_sigma) - lam1[k]
+                nat_grad_lam2[i,k] = -0.5(joint.precision + N_r_nk[k]*self.inv_sigma) - lam2[k]
+        
+        # Average natural gradient over minibatch
+        nat_grad_alpha = np.mean(np.array(nat_grad_alpha), axis=0)  # (K,)
+        nat_grad_lam1 = np.mean(np.array(nat_grad_lam1), axis=0)    # (K,D)
+        nat_grad_lam2 = np.mean(np.array(nat_grad_lam2), axis=0)    # (K,D,D)
+        
+        # Perform updates, map natural lam params to variational means, covs
+        self.alpha += self.step_sizes['alpha'] * nat_grad_alpha
+        lam1 += self.step_sizes['lam1'] * nat_grad_lam1
+        lam2 += self.step_sizes['lam2'] * nat_grad_lam2
+        for k in range(self.K):
+            self.means[k] = -0.5*np.dot(lam1[k], inv(lam2[k]))
+            self.precisions[k] = -2*lam2[k]
+            self.covariances[k] = inv(self.precisions[k])
+        
+    
     def _M_step_GD(self, X, joint, t):
         """
         Generate gradients of ELBO wrt variational params and take GD steps.
@@ -176,7 +218,7 @@ class VariationalDistribution:
         
         # Calculate SGD (single-sample) update steps for each sample in S
         for i in range(S):
-            N_r_nk = np.array([N*self.responsibilities[i,k] for k in range(self.K)])
+            N_r_nk = np.array([N*self.responsibilities[samples[i],k] for k in range(self.K)])
             xbar = np.array([X[samples[i]] for _ in range(self.K)])
             d_alpha.append(L_grad_alpha(joint.alpha, self.alpha, N_r_nk))
             d_m.append(L_grad_m(self.means, joint.mean, joint.precision, self.inv_sigma, N_r_nk, xbar))
@@ -258,14 +300,14 @@ class VariationalDistribution:
         """
         Updates the responsibility only of the single sampled point 
         """
-        for i in range(samples.shape[0]):
-            for k in range(self.K):
+        for k in range(self.K):
+            for i in range(samples.shape[0]):
                 if self.alpha[k] <= self.ALPHA_LB:
                     """Prevents functions of alpha in ELBO calculation going to 
                     infinity as alpha_k->0"""
                     self.responsibilities[:, k] = 0
                 else:
-                    self.responsibilities[i, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
+                    self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
                      
 
     # def minibatch_update(self,joint, X, minibatch_size=1):

@@ -1,0 +1,22 @@
+axes.spines.left   : False
+axes.spines.bottom : False
+axes.spines.top    : False
+axes.spines.right  : False
+axes.labelpad      : 3.0
+axes.xmargin       : 0
+
+xtick.labelsize    : small
+ytick.labelsize    : small
+
+legend.fontsize    : small
+
+font.family        : serif
+font.size          : 10
+
+text.usetex        : True
+
+axes.prop_cycle : cycler('color', ['8159a4', '60c4bf', 'f19c39', 'cb5763', '6e8dd7', '63a54c', 'cc5fb2', 'a28d3f'])
+
+# Make the subplot layout a little tighter than default
+figure.subplot.left    : 0.175
+figure.subplot.bottom  : 0.16
