@@ -69,12 +69,20 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     legend = ['Datapoints']
     
     for k in range(K):
+<<<<<<< HEAD
         if pi[k] > 1e-3:
             plt.plot(mu[k][0], mu[k][1], cols[k], marker='o', linestyle=None)
         else: 
             plt.plot(mu[k][0], mu[k][1], cols[k], marker='X', linestyle=None)
         # plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
         legend.append('k=%d'%k)
+=======
+        if np.sum(mu[k] == np.zeros(2)) == 0:
+            plt.plot(mu[k][0],mu[k][1],'ro')
+            plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
+        else:
+            plt.plot(0,0,'ko')
+>>>>>>> master
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])

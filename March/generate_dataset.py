@@ -13,6 +13,31 @@ from numpy.random import multivariate_normal
 np.random.seed(42)
 
 def generate_2D_dataset(N, K=2, centres=None, covs=None, weights=None):
+    """
+
+    Parameters
+    ----------
+    N : int
+        Number of 2D points wanted.
+    K : int, optional
+        Number of clusters of points. The default is 2.
+    centres : list of 2-vector numpy arrays, optional
+        Means of GMM generating data. The default is None.
+    covs : list of 2x2 matrix numpy arrays, optional
+        Covariances of GMM generating data. The default is None.
+    weights : 1D numpy array, optional
+        Mixture weights of GMM generating data. The default is None.
+
+    Returns
+    -------
+    X : Nx2 numpy array
+        Dataset, x-y coords.
+    centres : list of 2-vector numpy arrays, optional
+        Means of GMM generating data. The default is None.
+    covs : list of 2x2 matrix numpy arrays, optional
+        Covariances of GMM generating data. The default is None.
+
+    """
     # default
     if centres==None or covs==None:
         centres = [np.array([0.,8.]), np.array([5.,0.])]
