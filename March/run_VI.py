@@ -90,10 +90,7 @@ gifdir = 'gifs'
 for i in tqdm(range(N_its)):
     # Save copy of class with all current params for plotting etc
     variational_memory.append(deepcopy(variational))
-    # if i==53:
-    #     input()
     samples = np.random.choice(N, size=minibatch_size, replace=False)
-    # samples = np.sort(samples)
  
     # # EM steps, calculate ELBO
     variational.M_step(X, joint, samples, t=i)

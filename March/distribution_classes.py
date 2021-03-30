@@ -282,20 +282,7 @@ class VariationalDistribution:
                 for n in range(N):
                     # Eqn 10.49
                     self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
-      
-                    
-    def E_step_single_sample(self, X, sample):
-        """
-        Updates the responsibility only of the single sampled point
-        """
-        for k in range(self.K):
-            if self.alpha[k] <= self.ALPHA_LB:
-                """Prevents functions of alpha in ELBO calculation going to 
-                infinity as alpha_k->0"""
-                self.responsibilities[:, k] = 0
-            else:
-                self.responsibilities[:, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[sample])
- 
+
     def E_step_SGD(self, X, samples):
         """
         Updates the responsibility only of the single sampled point 
@@ -310,22 +297,7 @@ class VariationalDistribution:
                     self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
                      
 
-    # def minibatch_update(self,joint, X, minibatch_size=1):
-    #     N = X.shape[0]
-    #     # 1. Choose random minibatch
-    #     S = X[np.random.choice(X.shape[0], minibatch_size, replace=False)]
-    #     # 2. Update variational parameters
-    #     for k in range(self.K):  
-    #         alpha = 0.
-    #         C = np.zeros((self.D, self.D))
-    #         for i in range(minibatch_size):
-    #             alpha += (joint.alpha + N * self.responsibilities[i,k] - self.alpha[k]) 
-    #             invC += (self.precisions[k] - joint.precision - N * self.inv_sigma * self.responsibilities[i,k]
-    #         alpha = alpha * (step_size['alpha']/minibatch_size)
-    #         self.alpha[k] += alpha
-        
 
-        
 
     def perturb_variational_params(self, non_diag=False):
         # not necessary for the time being
