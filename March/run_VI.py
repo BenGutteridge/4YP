@@ -55,10 +55,12 @@ step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
 info is forgotten, delay >= 0 and downweights early iterations."""
 def gd_schedule(t=None, scale=2., delay=1., forgetting=0.5, 
                 step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3, 
-                            'lam1': 1e-3, 'lam2': 1e-3}):
+                            'lam1': 1e-3, 'lam2': 1e-3}): # maybe use kwargs?
     if t is not None:
         # rho_t = scale*(t + delay)**(-forgetting) # Eq 26, Hoffman SVI
-        rho_t = scale*np.exp(-0.05*t)
+        rho_t = scale*np.exp(-0.05*t)   # off the top of my head
+        # decay, A = 1, 0               # A is stability constant >= 0
+        # rho_t = scale/(t+1+A)**decay  # See Spall 4.14
         steps= {}
         for key in step_sizes:
             steps[key] = step_sizes[key] * rho_t 
