@@ -27,7 +27,7 @@ cols = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
 all_cols_m = ['m' for _ in range(200)]
 
 def make_gif(filedir, gifdir, gifname=''):
-  gifname = str(datetime.datetime.now())[:-7].replace(':',';') + gifname
+  gifname = str(datetime.datetime.now())[:-7].replace(':',';') + '__' + gifname
   with imageio.get_writer(gifdir+'/'+gifname+'.gif', mode='I') as writer:
       for filename in sorted(os.listdir(filedir)):
           image = imageio.imread(os.path.join(filedir,filename))
@@ -102,6 +102,7 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     plt.legend(legend)
     if isinstance(savefigpath, str):
         plt.savefig(savefigpath)
+        plt.close('all')
     else:
         plt.show()
     

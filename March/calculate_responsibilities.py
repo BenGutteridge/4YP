@@ -55,7 +55,7 @@ def r_nk(k, alpha, m, C, invSig, xn):
         return 0.
     
 def new_calculate_r_nk(variational, N, X, samples=None):
-    if samples == None: samples = np.arange(N)
+    if samples is None: samples = np.arange(N)
     v = variational
     rho, r = np.zeros((N, v.K)), np.zeros((N, v.K))
     # 1. calculate all rho_nk (from chosen samples)

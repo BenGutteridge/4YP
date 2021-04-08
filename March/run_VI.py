@@ -21,18 +21,18 @@ from distribution_classes import JointDistribution, VariationalDistribution
 from generate_dataset import generate_2D_dataset
 from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, plot_K_covs, plot_cov_ellipses_gif
 
-np.random.seed(42)
+np.random.seed(41)
 
 # %% Misc setup
 
 "Iterations and update_type"
 K = 6                   # Initial number of mixture components
-N_its = 50             # Number of iterations of chosen update method performed
+N_its = 100             # Number of iterations of chosen update method performed
 
 # update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
-# update_type = 'SGD'
-update_type = 'SNGD'
+update_type = 'SGD'
+# update_type = 'SNGD'
 print('\n%s' % update_type)
 minibatch_size = 10
 
@@ -40,11 +40,11 @@ minibatch_size = 10
 alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
 m_0 = np.zeros(2)   # Gaussian prior p(mu) = N(mu|m0, C0)
 C_0 = np.eye(2)     # Covariance of prior mu
-inv_sigma = 10*np.eye(2)   # Fixed covariance/precision of Gaussian components 
+inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components 
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 100
+N = 500
 num_clusters = 4
 X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
@@ -61,9 +61,9 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
 """Schedule for step sizes in GD. Constant by default (no t input) or a decaying
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
 info is forgotten, delay >= 0 and downweights early iterations."""
-def gd_schedule(t=None, scale=2., delay=1., forgetting=0.5, 
+def gd_schedule(t=None, scale=1, delay=1., forgetting=0.5, 
                 step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3, 
-                            'lam1': 1e-3, 'lam2': 1e-3}): # maybe use kwargs?
+                            'lam1': 1e-4, 'lam2': 1e-4}): # maybe use kwargs?
     if t is not None:
         # rho_t = scale*(t + delay)**(-forgetting) # Eq 26, Hoffman SVI
         rho_t = scale*np.exp(-0.05*t)   # off the top of my head
@@ -71,7 +71,10 @@ def gd_schedule(t=None, scale=2., delay=1., forgetting=0.5,
         # rho_t = scale/(t+1+A)**decay  # See Spall 4.14
         steps= {}
         for key in step_sizes:
-            steps[key] = step_sizes[key] * rho_t 
+            if update_type == 'SGD':
+                steps[key] = step_sizes[key] * rho_t 
+            elif update_type == 'SNGD':
+                steps[key] = 1*rho_t
     return steps
 
 "Initialising params and instantiating distributions"
@@ -98,8 +101,8 @@ for i in tqdm(range(N_its)):
     samples = np.random.choice(N, size=minibatch_size, replace=False)
  
     # # EM steps, calculate ELBO
-    variational.M_step(X, joint, samples, t=i)
     variational.E_step(X, samples)
+    variational.M_step(X, joint, samples, t=i)
     variational.calculate_weighted_statistics(X)
     variational.calculate_ELBO(joint)
     
@@ -114,7 +117,7 @@ for i in tqdm(range(N_its)):
 # %% Saving animation, plotting ELBO/other key params
 
 "Make and display gif of mixture model over time" 
-gifname = make_gif(filedir, gifdir)
+gifname = make_gif(filedir, gifdir, gifname=update_type)
 # Empty plots directory for next run
 for file in os.listdir(filedir):
   os.remove(os.path.join(filedir,file))

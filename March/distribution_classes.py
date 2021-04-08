@@ -167,8 +167,9 @@ class VariationalDistribution:
         nat_grad_alpha = np.zeros((S, self.K))
         nat_grad_lam1 = np.zeros((S, self.K, self.D))
         nat_grad_lam2 = np.zeros((S, self.K, self.D, self.D))
+        
         lam1 = np.array([np.dot(self.means[k], self.precisions[k]) for k in range(self.K)]) # (K,D)
-        lam2 = np.array([-0.5*self.covariances[k] for k in range(self.K)])                  # (K,D,D)
+        lam2 = np.array([-0.5*self.precisions[k] for k in range(self.K)])                  # (K,D,D)
         
         # Calculate natural gradients for each sample
         for i in range(samples.shape[0]):
@@ -262,7 +263,8 @@ class VariationalDistribution:
         responsibility of latent variables Z.
         Uses Eqn 10.49 (and 10.46) from Bishop
         """
-        if self.update_type == 'SGD':
+        if self.update_type in ['SGD','SNGD'
+                                ]:
             self._E_step_minibatch(X, samples)
         else:
             self._E_step_batch(X)
@@ -287,7 +289,7 @@ class VariationalDistribution:
 
     def _E_step_minibatch(self, X, samples):
         """
-        Updates the responsibility only of the single sampled point 
+        Updates the responsibility only of the minibatch of points
         """
         N = X.shape[0]
         self.responsibilities = calculate_r_nk(self, N, X, samples=samples)
@@ -299,7 +301,7 @@ class VariationalDistribution:
         #             self.responsibilities[:, k] = 0
         #         else:
         #             self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
-                     
+        pass      
 
 
 
