@@ -10,7 +10,6 @@ from numpy.linalg import inv
 from copy import copy
 from statistics_of_observed_data import N_k, x_k_bar, S_k
 from CAVI_updates import alpha_k as update_alpha, m_invC_k as update_means_precisions
-from calculate_responsibilities import r_nk, new_calculate_r_nk as calculate_r_nk
 from calculate_responsibilities import calculate_ln_rho_nk
 from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
@@ -276,7 +275,6 @@ class VariationalDistribution:
         Update responsibilities of entire dataset
         """
         N = X.shape[0]
-        # self.responsibilities = calculate_r_nk(self, N, X, samples=None)
         self.calculate_responsibilities(N, X, samples=None)
         
 
@@ -285,7 +283,6 @@ class VariationalDistribution:
         Updates the responsibility only of the minibatch of points
         """
         N = X.shape[0]
-        # self.responsibilities = calculate_r_nk(self, N, X, samples=samples)
         self.calculate_responsibilities(N, X, samples=samples)
 
 

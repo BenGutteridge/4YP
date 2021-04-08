@@ -21,7 +21,7 @@ from distribution_classes import JointDistribution, VariationalDistribution
 from generate_dataset import generate_2D_dataset
 from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, plot_K_covs, plot_cov_ellipses_gif
 
-np.random.seed(41)
+np.random.seed(42)
 
 # %% Misc setup
 
@@ -50,13 +50,13 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
 
-# trying with a real dataset
-X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
-X = X/5e4
-N = X.shape[0]
-K = 20
-K_inv_sigma = [inv_sigma for _ in range(K)]
-centres, covs = None, None
+# # trying with a real dataset
+# X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
+# X = X/5e4
+# N = X.shape[0]
+# K = 20
+# K_inv_sigma = [inv_sigma for _ in range(K)]
+# centres, covs = None, None
 
 """Schedule for step sizes in GD. Constant by default (no t input) or a decaying
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
