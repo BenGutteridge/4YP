@@ -11,6 +11,7 @@ from copy import copy
 from statistics_of_observed_data import N_k, x_k_bar, S_k
 from CAVI_updates import alpha_k as update_alpha, m_invC_k as update_means_precisions
 from calculate_responsibilities import r_nk, new_calculate_r_nk as calculate_r_nk
+from calculate_responsibilities import calculate_ln_rho_nk
 from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
@@ -259,7 +260,7 @@ class VariationalDistribution:
     
     def E_step(self, X, samples=None):
         """
-        Undertakes E-step, optimising ELBO by updating variational param
+        Performs E-step, optimising ELBO by updating variational param
         responsibility of latent variables Z.
         Uses Eqn 10.49 (and 10.46) from Bishop
         """
@@ -275,34 +276,17 @@ class VariationalDistribution:
         Update responsibilities of entire dataset
         """
         N = X.shape[0]
-        self.responsibilities = calculate_r_nk(self, N, X, samples=None)
+        # self.responsibilities = calculate_r_nk(self, N, X, samples=None)
+        self.calculate_responsibilities(N, X, samples=None)
         
-        # for k in range(self.K):
-        #     if self.alpha[k] <= self.ALPHA_LB:
-        #         """Prevents functions of alpha in ELBO calculation going to 
-        #         infinity as alpha_k->0"""
-        #         self.responsibilities[:, k] = np.zeros(N)
-        #     else:
-        #         for n in range(N):
-        #             # Eqn 10.49
-        #             self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
 
     def _E_step_minibatch(self, X, samples):
         """
         Updates the responsibility only of the minibatch of points
         """
         N = X.shape[0]
-        self.responsibilities = calculate_r_nk(self, N, X, samples=samples)
-        # for k in range(self.K):
-        #     for i in range(samples.shape[0]):
-        #         if self.alpha[k] <= self.ALPHA_LB:
-        #             """Prevents functions of alpha in ELBO calculation going to 
-        #             infinity as alpha_k->0"""
-        #             self.responsibilities[:, k] = 0
-        #         else:
-        #             self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
-        pass      
-
+        # self.responsibilities = calculate_r_nk(self, N, X, samples=samples)
+        self.calculate_responsibilities(N, X, samples=samples)
 
 
     def perturb_variational_params(self, non_diag=False):
@@ -316,6 +300,30 @@ class VariationalDistribution:
     def calculate_mixing_coefficients(self):
         # E[pi_k], Bishop Eqn B.17
         self.mixing_coefficients = self.alpha/np.sum(self.alpha)
+        
+    def calculate_responsibilities(self, N, X, samples=None):
+        if samples is None: samples = np.arange(N)
+        rho, r = np.zeros((N, self.K)), np.zeros((N, self.K))
+        # r = self.responsibilities
+        # 1. calculate all rho_nk (from chosen samples)
+        for n in range(N):
+            if n in samples:
+                for k in range(self.K):
+                    if self.alpha[k] >= self.ALPHA_LB:
+                        rho[n][k] = np.exp(calculate_ln_rho_nk(k,self.alpha,self.means,self.covariances,self.inv_sigma,X[n],D=2))
+        # 2. use rho_nk to calculate r_nk
+        live_components = np.arange(self.K)[self.alpha > self.ALPHA_LB]
+        for n in samples:
+            for k in live_components:
+                try:
+                    r[n][k] = float(rho[n][k]) / float(np.sum(rho[n][:]))
+                    assert not np.isnan(r[n][k])
+                except AssertionError:
+                    print('NaN in r[%d][%d], rho[n][:] = ' % (n,k), rho[n][:])
+                except ZeroDivisionError:
+                    # when all components bear negligible responsibility
+                    r[n][k] = 0.
+        self.responsibilities = r # n.b. resets all previous responsibilities
             
     def calculate_ELBO(self, joint):
         """Based on equation 10.70-10.77 from Bishop, with some modifications due to our fixed covariance."""

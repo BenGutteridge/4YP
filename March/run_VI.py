@@ -31,10 +31,10 @@ N_its = 100             # Number of iterations of chosen update method performed
 
 # update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
-update_type = 'SGD'
-# update_type = 'SNGD'
+# update_type = 'SGD'
+update_type = 'SNGD'
 print('\n%s' % update_type)
-minibatch_size = 10
+minibatch_size = 50
 
 "Define parameters of joint distribution (effectively priors on variational params)"
 alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
@@ -50,13 +50,13 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
 
-# # trying with a real dataset
-# X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
-# X = X/1e5
-# N = X.shape[0]
-# K = 20
-# K_inv_sigma = [inv_sigma for _ in range(K)]
-# centres, covs = None, None
+# trying with a real dataset
+X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
+X = X/5e4
+N = X.shape[0]
+K = 20
+K_inv_sigma = [inv_sigma for _ in range(K)]
+centres, covs = None, None
 
 """Schedule for step sizes in GD. Constant by default (no t input) or a decaying
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
@@ -64,18 +64,19 @@ info is forgotten, delay >= 0 and downweights early iterations."""
 def gd_schedule(t=None, scale=1, delay=1., forgetting=0.5, 
                 step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3, 
                             'lam1': 1e-4, 'lam2': 1e-4}): # maybe use kwargs?
-    if t is not None:
+    if t is None: return step_sizes
+    else:    
         # rho_t = scale*(t + delay)**(-forgetting) # Eq 26, Hoffman SVI
         rho_t = scale*np.exp(-0.05*t)   # off the top of my head
         # decay, A = 1, 0               # A is stability constant >= 0
         # rho_t = scale/(t+1+A)**decay  # See Spall 4.14
         steps= {}
         for key in step_sizes:
-            if update_type == 'SGD':
-                steps[key] = step_sizes[key] * rho_t 
-            elif update_type == 'SNGD':
+            if update_type == 'SNGD':
                 steps[key] = 1*rho_t
-    return steps
+            else:
+                steps[key] = step_sizes[key] * rho_t 
+        return steps
 
 "Initialising params and instantiating distributions"
 # TODO: could we move this into VariationalDistribution? Should we avoid dependence on N?
