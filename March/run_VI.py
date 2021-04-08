@@ -27,12 +27,12 @@ np.random.seed(42)
 
 "Iterations and update_type"
 K = 6                   # Initial number of mixture components
-N_its = 100             # Number of iterations of chosen update method performed
+N_its = 50             # Number of iterations of chosen update method performed
 
 # update_type = 'GD'      # Using (true) gradient descent
-update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
+# update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
 # update_type = 'SGD'
-# update_type = 'SNGD'
+update_type = 'SNGD'
 print('\n%s' % update_type)
 minibatch_size = 10
 
@@ -40,15 +40,23 @@ minibatch_size = 10
 alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
 m_0 = np.zeros(2)   # Gaussian prior p(mu) = N(mu|m0, C0)
 C_0 = np.eye(2)     # Covariance of prior mu
-sigma = inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components 
+inv_sigma = 10*np.eye(2)   # Fixed covariance/precision of Gaussian components 
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 200
+N = 100
 num_clusters = 4
 X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
                                        weights = np.ones(num_clusters)/num_clusters)
+
+# # trying with a real dataset
+# X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
+# X = X/1e5
+# N = X.shape[0]
+# K = 20
+# K_inv_sigma = [inv_sigma for _ in range(K)]
+# centres, covs = None, None
 
 """Schedule for step sizes in GD. Constant by default (no t input) or a decaying
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
@@ -76,9 +84,6 @@ variational = VariationalDistribution(initial_responsibilities,
 joint = JointDistribution(alpha_0, m_0, covariance=C_0)
 variational.initialise_params()
 
-# for k in range(K):
-#     variational.means[k] += np.array([4.,15.])
-
 "For plotting"
 variational_memory = []
 filedir = 'plots'
@@ -104,7 +109,7 @@ for i in tqdm(range(N_its)):
         title = 'Minibatch: %d, ' % minibatch_size + title
     filename = 'plots/img%04d.png'%i
     variational.calculate_mixing_coefficients()
-    plot_GMM(X, variational.means, K_inv_sigma, variational.mixing_coefficients, centres, covs, K, title, savefigpath=filename)
+    plot_GMM(X, variational.means, K_inv_sigma, variational.mixing_coefficients, centres, covs, K, title, savefigpath=filename, xylims=None)
     
 # %% Saving animation, plotting ELBO/other key params
 

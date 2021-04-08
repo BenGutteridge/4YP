@@ -53,3 +53,28 @@ def r_nk(k, alpha, m, C, invSig, xn):
     except ZeroDivisionError: 
         # When all K components bear negligible responsibility
         return 0.
+    
+def new_calculate_r_nk(variational, N, X, samples=None):
+    if samples == None: samples = np.arange(N)
+    v = variational
+    rho, r = np.zeros((N, v.K)), np.zeros((N, v.K))
+    # 1. calculate all rho_nk (from chosen samples)
+    for n in range(N):
+        if n in samples:
+            for k in range(v.K):
+                if v.alpha[k] >= v.ALPHA_LB:
+                    rho[n][k] = np.exp(calculate_ln_rho_nk(k,v.alpha,v.means,v.covariances,v.inv_sigma,X[n],D=2))
+    # 2. use rho_nk to calculate r_nk
+    for n in range(N):
+        if n in samples:
+            for k in range(v.K):
+                try:
+                    r[n][k] = float(rho[n][k]) / float(np.sum(rho[n][:]))
+                    assert not np.isnan(r[n][k])
+                except AssertionError:
+                    print('NaN in r[%d][%d], rho[n][:] = ' % (n,k), rho[n][:])
+                except ZeroDivisionError:
+                    # when all components bear negligible responsibility
+                    r[n][k] = 0.
+    return r
+        

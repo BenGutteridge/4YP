@@ -24,6 +24,8 @@ warnings.filterwarnings("ignore",category=matplotlib.cbook.mplDeprecation)
 cols = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', 
         '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
 
+all_cols_m = ['m' for _ in range(200)]
+
 def make_gif(filedir, gifdir, gifname=''):
   gifname = str(datetime.datetime.now())[:-7].replace(':',';') + gifname
   with imageio.get_writer(gifdir+'/'+gifname+'.gif', mode='I') as writer:
@@ -68,21 +70,18 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
     
     legend = ['Datapoints']
     
+    # label clusters if too many to have unique colours
+    if K > len(cols):
+        for k in range(K):
+            plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
+        cols = 'r'*200
+        
     for k in range(K):
-<<<<<<< HEAD
         if pi[k] > 1e-3:
             plt.plot(mu[k][0], mu[k][1], cols[k], marker='o', linestyle=None)
         else: 
             plt.plot(mu[k][0], mu[k][1], cols[k], marker='X', linestyle=None)
-        # plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
-        legend.append('k=%d'%k)
-=======
-        if np.sum(mu[k] == np.zeros(2)) == 0:
-            plt.plot(mu[k][0],mu[k][1],'ro')
-            plt.text(mu[k][0],mu[k][1], 'k=%d'%k)
-        else:
-            plt.plot(0,0,'ko')
->>>>>>> master
+
         cov = inv(lam[k])
         ell = draw_ellipse(mu[k], cov)
         ell.set_alpha(pi[k])
@@ -92,13 +91,13 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
         splot.add_artist(ell)
         
     # Plotting the ellipses for the GMM that generated the data
-    for i in range(len(centres)):
-        true_ell = draw_ellipse(centres[i], covs[i])
-        true_ell.set_edgecolor('g')
-        true_ell.set_fill(False)
-        splot.add_artist(true_ell)
-    # legend.append('Data generation GMM 1, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[0][0,0],covs[0][1,1],covs[0][1,0]))
-    # legend.append('Data generation GMM 2, var1=%.2f, var2=%.2f, cov=%.2f' %(covs[1][0,0],covs[1][1,1],covs[1][1,0]))
+    if centres is not None and covs is not None:
+        for i in range(len(centres)):
+            true_ell = draw_ellipse(centres[i], covs[i])
+            true_ell.set_edgecolor('g')
+            true_ell.set_fill(False)
+            splot.add_artist(true_ell)
+    
     plt.title(title)
     plt.legend(legend)
     if isinstance(savefigpath, str):

@@ -10,7 +10,7 @@ from numpy.linalg import inv
 from copy import copy
 from statistics_of_observed_data import N_k, x_k_bar, S_k
 from CAVI_updates import alpha_k as update_alpha, m_invC_k as update_means_precisions
-from calculate_responsibilities import r_nk
+from calculate_responsibilities import r_nk, new_calculate_r_nk as calculate_r_nk
 from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
@@ -144,7 +144,7 @@ class VariationalDistribution:
         elif self.update_type == "SGD":
             self._M_step_SGD(X, joint, samples, t)
         elif self.update_type == "SNGD":
-            self._M_step_SGD(X, joint, samples, t)
+            self._M_step_SNGD(X, joint, samples, t)
 
     def _M_step_CAVI(self, X, joint):
         """CAVI updates. Modified from Bishop Eqns 10.58-62"""
@@ -161,10 +161,10 @@ class VariationalDistribution:
         stochastic natural gradient descent, using the fact that NGD is 
         equivalent to CAVI updates with a step size of 1
         
-        TODO: write this using the natural param lambda, as in Xie
         """
+        self.step_sizes = self.gd_schedule(t)
         N, S = X.shape[0], samples.shape[0]
-        nat_grad_alpha = np.zeros(S, self.K)
+        nat_grad_alpha = np.zeros((S, self.K))
         nat_grad_lam1 = np.zeros((S, self.K, self.D))
         nat_grad_lam2 = np.zeros((S, self.K, self.D, self.D))
         lam1 = np.array([np.dot(self.means[k], self.precisions[k]) for k in range(self.K)]) # (K,D)
@@ -178,7 +178,7 @@ class VariationalDistribution:
             nat_grad_alpha[i] = (update_alpha(N_r_nk, joint.alpha) - self.alpha)
             for k in range(self.K):
                 nat_grad_lam1[i,k] = np.dot(joint.mean, joint.precision) + N_r_nk[k]*np.dot(xbar[k], self.inv_sigma) - lam1[k]
-                nat_grad_lam2[i,k] = -0.5(joint.precision + N_r_nk[k]*self.inv_sigma) - lam2[k]
+                nat_grad_lam2[i,k] = -0.5*(joint.precision + N_r_nk[k]*self.inv_sigma) - lam2[k]
         
         # Average natural gradient over minibatch
         nat_grad_alpha = np.mean(np.array(nat_grad_alpha), axis=0)  # (K,)
@@ -263,38 +263,42 @@ class VariationalDistribution:
         Uses Eqn 10.49 (and 10.46) from Bishop
         """
         if self.update_type == 'SGD':
-            self.E_step_SGD(X, samples)
+            self._E_step_minibatch(X, samples)
         else:
-            self.E_step_batch(X)
+            self._E_step_batch(X)
 
 
-    def E_step_batch(self, X):
+    def _E_step_batch(self, X):
         """
         Update responsibilities of entire dataset
         """
         N = X.shape[0]
-        for k in range(self.K):
-            if self.alpha[k] <= self.ALPHA_LB:
-                """Prevents functions of alpha in ELBO calculation going to 
-                infinity as alpha_k->0"""
-                self.responsibilities[:, k] = np.zeros(N)
-            else:
-                for n in range(N):
-                    # Eqn 10.49
-                    self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
+        self.responsibilities = calculate_r_nk(self, N, X, samples=None)
+        
+        # for k in range(self.K):
+        #     if self.alpha[k] <= self.ALPHA_LB:
+        #         """Prevents functions of alpha in ELBO calculation going to 
+        #         infinity as alpha_k->0"""
+        #         self.responsibilities[:, k] = np.zeros(N)
+        #     else:
+        #         for n in range(N):
+        #             # Eqn 10.49
+        #             self.responsibilities[n, k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[n])
 
-    def E_step_SGD(self, X, samples):
+    def _E_step_minibatch(self, X, samples):
         """
         Updates the responsibility only of the single sampled point 
         """
-        for k in range(self.K):
-            for i in range(samples.shape[0]):
-                if self.alpha[k] <= self.ALPHA_LB:
-                    """Prevents functions of alpha in ELBO calculation going to 
-                    infinity as alpha_k->0"""
-                    self.responsibilities[:, k] = 0
-                else:
-                    self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
+        N = X.shape[0]
+        self.responsibilities = calculate_r_nk(self, N, X, samples=samples)
+        # for k in range(self.K):
+        #     for i in range(samples.shape[0]):
+        #         if self.alpha[k] <= self.ALPHA_LB:
+        #             """Prevents functions of alpha in ELBO calculation going to 
+        #             infinity as alpha_k->0"""
+        #             self.responsibilities[:, k] = 0
+        #         else:
+        #             self.responsibilities[samples[i], k] = r_nk(k, self.alpha, self.means, self.covariances, self.inv_sigma, X[samples[i]])
                      
 
 
