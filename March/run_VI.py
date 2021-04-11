@@ -27,12 +27,12 @@ np.random.seed(42)
 
 "Iterations and update_type"
 K = 6                   # Initial number of mixture components
-N_its = 100             # Number of iterations of chosen update method performed
+N_its = 60             # Number of iterations of chosen update method performed
 
 # update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
-# update_type = 'SGD'
-update_type = 'SNGD'
+update_type = 'SGD'
+# update_type = 'SNGD'
 print('\n%s' % update_type)
 minibatch_size = 50
 
@@ -52,7 +52,7 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
 
 # # trying with a real dataset
 # X = np.loadtxt(r"C:\Users\benpg\Documents\4YP\Datasets\s1.txt")
-# X = X/5e4
+# X = X/2.5e4
 # N = X.shape[0]
 # K = 20
 # K_inv_sigma = [inv_sigma for _ in range(K)]

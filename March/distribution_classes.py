@@ -14,6 +14,7 @@ from calculate_responsibilities import calculate_ln_rho_nk
 from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
+from grad_est_utils import grad_H_q, sample_mu, sample_pi
 
 np.random.seed(42)
 
@@ -235,6 +236,30 @@ class VariationalDistribution:
         self.means += (1/S) * self.step_sizes['m'] * sum_d_m
         self.covariances += (1/S) * self.step_sizes['C'] * sum_d_C
         self.update_precisions_from_covariances()
+        
+        
+    def _M_step_SFE(self, joint, X):
+        # using analytical entropy of q
+        grad_H_alpha, grad_H_m, grad_H_C = grad_H_q(self)
+        n_samples = 1 # number of samples of pi, mu
+        D_ELBO_alpha, D_ELBO_m, D_ELBO_C = 0., 0., 0.
+        for i in range(n_samples):
+            mu_hat = sample_mu(self) # get a sample
+            pi_hat = sample_pi(self)
+            # 'black box' cost function
+            f = evaluate_cost_SFE(self)
+            f = ln_p_X_given_Z_mu() + ln_p_Z_given_pi() + ln_p_pi + ln_p_mu()
+            # gradients of log measure for score function
+            grad_alpha_ln_q = grad_ln_q_pi()
+            grad_m_ln_q, grad_C_ln_q = grad_ln_q_mu()
+            # collect gradients from multiple MC samples
+            D_ELBO_alpha += f * grad_alpha_ln_q
+            D_ELBO_m += f * grad_m_ln_q
+            D_ELBO_C += f * grad_C_ln_q
+        # average over number of samples and set gradient for SGD update
+        self.d_alpha = D_ELBO_alpha/n_samples + grad_H_alpha
+        self.d_m = D_ELBO_m/n_samples + grad_H_m
+        self.d_C = D_ELBO_C/n_samples + grad_H_alpha
         
     def _calculate_gradient_updates(self, joint):
         """ 

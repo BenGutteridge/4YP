@@ -16,8 +16,14 @@ def L_grad_alpha(alpha0, alpha, NK):
     d_alpha = np.zeros(K)
     alpha_hat = np.sum(alpha)
     for k in range(K):
-        d_alpha[k] = (NK[k]+alpha0-alpha[k])*(psi_prime(1,alpha[k]) - psi_prime(1,alpha_hat))
+        a = (NK[k]+alpha0-alpha[k])
+        b = (psi_prime(1,alpha[k]) - psi_prime(1,alpha_hat))
+        c = digamma(alpha[k]) - digamma(alpha_hat)
+        d_alpha[k] = (a * b) - c
     return d_alpha*(alpha>0.1)
+
+def H_grad_alpha():
+    pass
 
 def L_grad_m(m, m0, invC0, invSig, NK, xbar):
     K, d_m = len(m), []
