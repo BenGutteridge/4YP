@@ -14,7 +14,10 @@ from calculate_responsibilities import calculate_ln_rho_nk
 from grad_funcs import L_grad_alpha, L_grad_m, L_grad_C
 from calculate_ELBO import E_ln_p_X_given_Z_mu, E_ln_p_Z_given_pi, E_ln_p_pi, E_ln_p_mu
 from calculate_ELBO import E_ln_q_Z, E_ln_q_pi, E_ln_q_mu
-from grad_est_utils import grad_H_q, sample_mu, sample_pi
+from grad_est_utils import grad_H_q, sample_mu, sample_pi, evaluate_cost_SFE
+from grad_est_utils import grad_ln_q_pi, grad_ln_q_mu
+from grad_est_utils import grad_alpha_f, grad_m_f, grad_rootC_f
+from grad_est_utils import sample_pathwise_mu, sample_pathwise_pi
 
 np.random.seed(42)
 
@@ -146,6 +149,10 @@ class VariationalDistribution:
             self._M_step_SGD(X, joint, samples, t)
         elif self.update_type == "SNGD":
             self._M_step_SNGD(X, joint, samples, t)
+        elif self.update_type == "SFE":
+            self._M_step_SFE(joint, X, t)
+        elif self.update_type == "PW":
+            self._M_step_pathwise(joint, X, t)
 
     def _M_step_CAVI(self, X, joint):
         """CAVI updates. Modified from Bishop Eqns 10.58-62"""
@@ -238,20 +245,24 @@ class VariationalDistribution:
         self.update_precisions_from_covariances()
         
         
-    def _M_step_SFE(self, joint, X):
+    def _M_step_SFE(self, joint, X, t, n_samples=100):
+        """
+        Score function estimator for GD optimisation of alpha, m, C
+        Uses n_samples of pi, mu for MC gradient estimate
+        """
+        K, D = self.K, X.shape[1]
+        self.step_sizes = self.gd_schedule(t)
         # using analytical entropy of q
         grad_H_alpha, grad_H_m, grad_H_C = grad_H_q(self)
-        n_samples = 1 # number of samples of pi, mu
-        D_ELBO_alpha, D_ELBO_m, D_ELBO_C = 0., 0., 0.
+        D_ELBO_alpha, D_ELBO_m, D_ELBO_C = np.zeros(K), np.zeros((K, D)), np.zeros((K,D,D))
         for i in range(n_samples):
             mu_hat = sample_mu(self) # get a sample
             pi_hat = sample_pi(self)
             # 'black box' cost function
-            f = evaluate_cost_SFE(self)
-            f = ln_p_X_given_Z_mu() + ln_p_Z_given_pi() + ln_p_pi + ln_p_mu()
+            f = float(evaluate_cost_SFE(self, joint, X, pi_hat, mu_hat))/X.shape[0]
             # gradients of log measure for score function
-            grad_alpha_ln_q = grad_ln_q_pi()
-            grad_m_ln_q, grad_C_ln_q = grad_ln_q_mu()
+            grad_alpha_ln_q = grad_ln_q_pi(self, pi_hat)
+            grad_m_ln_q, grad_C_ln_q = grad_ln_q_mu(self, mu_hat)
             # collect gradients from multiple MC samples
             D_ELBO_alpha += f * grad_alpha_ln_q
             D_ELBO_m += f * grad_m_ln_q
@@ -259,7 +270,35 @@ class VariationalDistribution:
         # average over number of samples and set gradient for SGD update
         self.d_alpha = D_ELBO_alpha/n_samples + grad_H_alpha
         self.d_m = D_ELBO_m/n_samples + grad_H_m
-        self.d_C = D_ELBO_C/n_samples + grad_H_alpha
+        self.d_C = D_ELBO_C/n_samples + grad_H_C
+        # use same gradient update method as GD
+        self._apply_gradient_updates()
+        
+    def _M_step_pathwise(self, joint, X, t, n_samples=10):
+        K, D = self.K, X.shape[1]
+        self.step_sizes = self.gd_schedule(t)
+        sum_grad_alpha_f, sum_grad_m_f, sum_grad_rootC_f = np.zeros(K), np.zeros((K, D)), np.zeros((K,D,D))
+        for i in range(n_samples):
+            # sample through paths
+            mu_hat, xi_hat = sample_pathwise_mu(self) # get a sample
+            pi_hat, z_hat, u_hat = sample_pathwise_pi(self)
+            # evaluate grad f with variational params moved into f
+            sum_grad_alpha_f += grad_alpha_f(self, pi_hat, z_hat, u_hat)
+            sum_grad_m_f += grad_m_f(self, joint, X, mu_hat)
+            sum_grad_rootC_f += grad_rootC_f(self, joint, X, xi_hat, mu_hat)
+        # average over number of samples
+        self.d_alpha = sum_grad_alpha_f/n_samples
+        self.d_m = sum_grad_m_f/n_samples
+        self.d_C = np.zeros(K)
+        d_rootC = sum_grad_rootC_f/n_samples
+        # use same gradient update method as GD
+        self._apply_gradient_updates()
+        # need to update rootC separately
+        root_C = self.covariances**0.5
+        root_C += d_rootC * self.step_sizes['C']
+        self.covariances = root_C**2
+        self.update_precisions_from_covariances()
+            
         
     def _calculate_gradient_updates(self, joint):
         """ 
@@ -310,10 +349,6 @@ class VariationalDistribution:
         N = X.shape[0]
         self.calculate_responsibilities(N, X, samples=samples)
 
-
-    def perturb_variational_params(self, non_diag=False):
-        # not necessary for the time being
-        pass
                     
     def update_precisions_from_covariances(self):
         for k in range(self.K):

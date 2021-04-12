@@ -27,12 +27,15 @@ np.random.seed(42)
 
 "Iterations and update_type"
 K = 6                   # Initial number of mixture components
-N_its = 60             # Number of iterations of chosen update method performed
+N_its = 50             # Number of iterations of chosen update method performed
 
 # update_type = 'GD'      # Using (true) gradient descent
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
-update_type = 'SGD'
-# update_type = 'SNGD'
+# update_type = 'SGD'
+# update_type = 'SNGD'  # SVI, stochastic natural gradients
+# update_type = 'SFE'   # Using regular E-step and score function estimator for phi grads
+update_type = 'PW'      # Using regular E-step and pathwise grad est
+
 print('\n%s' % update_type)
 minibatch_size = 50
 
@@ -44,7 +47,7 @@ inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components
 K_inv_sigma = [inv_sigma for _ in range(K)] # for plotting
 
 "Generating dataset"
-N = 500
+N = 200
 num_clusters = 4
 X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
                                        # weights=np.random.dirichlet(np.ones(num_clusters)),
@@ -62,7 +65,7 @@ X, centres, covs, weights = generate_2D_dataset(N, K=num_clusters,
 step size. forgetting rate is between 0.5 and 1 and indicates how quickly old
 info is forgotten, delay >= 0 and downweights early iterations."""
 def gd_schedule(t=None, scale=1, delay=1., forgetting=0.5, 
-                step_sizes={'alpha': 1.0, 'm': 1e-2, 'C': 1e-3, 
+                step_sizes={'alpha': 1.0, 'm': 1, 'C': 1e-3, 
                             'lam1': 1e-4, 'lam2': 1e-4}): # maybe use kwargs?
     if t is None: return step_sizes
     else:    
@@ -106,6 +109,7 @@ for i in tqdm(range(N_its)):
     variational.M_step(X, joint, samples, t=i)
     variational.calculate_weighted_statistics(X)
     variational.calculate_ELBO(joint)
+    print(variational.ELBO)
     
     # Plotting stuff
     title = '%s: Iteration %d -- ELBO = %7.0f'%(variational.update_type, i, variational.ELBO)
