@@ -245,7 +245,7 @@ class VariationalDistribution:
         self.update_precisions_from_covariances()
         
         
-    def _M_step_SFE(self, joint, X, t, n_samples=100):
+    def _M_step_SFE(self, joint, X, t, n_samples=10):
         """
         Score function estimator for GD optimisation of alpha, m, C
         Uses n_samples of pi, mu for MC gradient estimate
@@ -255,18 +255,21 @@ class VariationalDistribution:
         # using analytical entropy of q
         grad_H_alpha, grad_H_m, grad_H_C = grad_H_q(self)
         D_ELBO_alpha, D_ELBO_m, D_ELBO_C = np.zeros(K), np.zeros((K, D)), np.zeros((K,D,D))
+        avg_f = float(evaluate_cost_SFE(self, joint, X, sample_pi(self), sample_mu(self)))/X.shape[0]
         for i in range(n_samples):
             mu_hat = sample_mu(self) # get a sample
             pi_hat = sample_pi(self)
             # 'black box' cost function
             f = float(evaluate_cost_SFE(self, joint, X, pi_hat, mu_hat))/X.shape[0]
+            avg_f = np.mean((f, avg_f))
+            print('f: ', f, 'avg_f: ', avg_f)
             # gradients of log measure for score function
             grad_alpha_ln_q = grad_ln_q_pi(self, pi_hat)
             grad_m_ln_q, grad_C_ln_q = grad_ln_q_mu(self, mu_hat)
             # collect gradients from multiple MC samples
-            D_ELBO_alpha += f * grad_alpha_ln_q
-            D_ELBO_m += f * grad_m_ln_q
-            D_ELBO_C += f * grad_C_ln_q
+            D_ELBO_alpha += (f - avg_f) * grad_alpha_ln_q
+            D_ELBO_m += (f - avg_f) * grad_m_ln_q
+            D_ELBO_C += (f - avg_f) * grad_C_ln_q
         # average over number of samples and set gradient for SGD update
         self.d_alpha = D_ELBO_alpha/n_samples + grad_H_alpha
         self.d_m = D_ELBO_m/n_samples + grad_H_m

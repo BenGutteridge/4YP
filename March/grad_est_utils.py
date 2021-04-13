@@ -27,7 +27,7 @@ def grad_ln_q_pi(var, pi):
     alpha = var.alpha
     grad = np.zeros(alpha.shape[0])
     for k in range(alpha.shape[0]):
-        grad[k] = digamma(alpha[k]) - digamma(np.sum(alpha)) + alpha[k]*np.log(pi[k])
+        grad[k] = digamma(np.sum(alpha)) - digamma(alpha[k]) + alpha[k]*np.log(pi[k])
     return grad
 
 def grad_ln_q_mu(var, mu):
@@ -36,7 +36,7 @@ def grad_ln_q_mu(var, mu):
     grad_m, grad_C = np.zeros((K,D)), np.zeros((K,D,D))
     for k in range(K):
         v = (mu[k] - m[k]).reshape(2,1)
-        grad_m[k] = -1 * np.dot(C[k], v).reshape(D,)
+        grad_m[k] = -1 * np.dot(invC[k], v).reshape(D,)
         grad_C[k] = -0.5 * (np.dot(v, v.T) + invC[k])
     return grad_m, grad_C
 
@@ -70,7 +70,7 @@ def ln_p_X_given_Z_mu(var, X, mu):
         for k in range(K):
             v = (X[n] - mu[k]).reshape(2,1)
             _sum += r[n,k] * (multi_dot((v.T, var.inv_sigma, v)) + c)
-    return -0.5 * _sum
+    return -0.5 * _sum # should be -1*
 
 def ln_p_Z_given_pi(var, pi):
     N, K = var.means.shape[1], var.K
@@ -154,14 +154,14 @@ def grad_m_f(var, joint, X, sample_mu):
 
 def grad_mu_f(var, joint, X, mu):
     K,D = var.K, X.shape[1]
-    a = np.zeros(D,)
     D_mu_f = np.zeros((K,D))
     for k in range(K):
+        a = np.zeros(D,)
         for n in range(X.shape[0]):
             a += var.responsibilities[n][k] * dot((X[n] - mu[k]), var.inv_sigma)
         b = dot((mu[k] - joint.mean), joint.precision)
         c = dot((mu[k] - var.means[k]), var.precisions[k])
-        D_mu_f[k] = 1 * (a + b + c) * (1/X.shape[0])
+        D_mu_f[k] = a + b - c
     return D_mu_f
 
 ### mu (normal), C
