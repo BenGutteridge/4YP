@@ -107,10 +107,10 @@ class VariationalDistribution:
         
         self.gd_schedule = gd_schedule
         
-    def initialise_params(self, init_alpha=10):
+    def initialise_params(self, X, init_alpha=10):
         """Initialise variational params before GD (or other) updates"""
         self.alpha = np.ones(self.K)*init_alpha
-        self.means = 2*np.random.rand(self.K,self.D) - 1
+        self.means = np.mean(X, axis=0) + (5*np.random.rand(self.K,self.D) - 2.5)
         self.covariances = np.array([np.eye(2) for _ in range(self.K)])
         self.update_precisions_from_covariances()
 
@@ -281,7 +281,7 @@ class VariationalDistribution:
         # use same gradient update method as GD
         self._apply_gradient_updates()
         
-    def _M_step_pathwise(self, joint, X, t, n_samples=20, iwae=True):
+    def _M_step_pathwise(self, joint, X, t, n_samples=1, iwae=False):
         K, D = self.K, X.shape[1]
         self.step_sizes = self.gd_schedule(t)
         _grad_alpha_f = np.zeros((n_samples,K))

@@ -117,8 +117,9 @@ def plot_ELBO(ELBO, ELBO_E, ELBO_M, N_its):
     plt.ylabel('Evidence lower bound')
     plt.show();
     
+    
 # Plot evolution of a 1D parameter (a K-length vector) evolve over time 
-def plot_1D_phi(phis, title, K):
+def plot_1D_phi(phis, title, K, savefigdir=None):
     plt.figure()
     legends = []
     for k in range(K):
@@ -127,6 +128,8 @@ def plot_1D_phi(phis, title, K):
     plt.legend(legends)
     plt.title(title)
     plt.xlabel('Iterations')
+    if savefigdir is not None:
+        plt.savefig(os.path.join(savefigdir, title))
  
 # Plot individual elements (variance in x,y, and covariance) of K components over time
 def plot_K_covs(varx,vary,covxy,K):

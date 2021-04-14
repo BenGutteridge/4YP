@@ -38,13 +38,20 @@ def generate_2D_dataset(N, K=2, centres=None, covs=None, weights=None):
         Covariances of GMM generating data. The default is None.
 
     """
-    # default
-    if centres==None or covs==None:
-        centres = [np.array([0.,8.]), np.array([5.,0.])]
-        covs = [np.eye(2), np.array([[0.6,0.4],
-                             [0.4,0.6]])] 
-        if K>2:
-            for k in range(2,K):
+    # # default
+    # if centres==None or covs==None:
+    #     centres = [np.array([0.,8.]), np.array([5.,0.])]
+    #     covs = [np.eye(2), np.array([[0.6,0.4],
+    #                          [0.4,0.6]])] 
+    #     if K>2:
+    #         for k in range(2,K):
+    #             centres.append(np.random.randint(10, size=2))
+    #             covs.append(np.eye(2))
+    
+    # Fully random, no initially fixed clusters
+    if centres is None or covs is None:
+        centres, covs = [],[]
+        for k in range(K):
                 centres.append(np.random.randint(10, size=2))
                 covs.append(np.eye(2))
     if weights is None:
