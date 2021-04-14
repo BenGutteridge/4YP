@@ -166,10 +166,42 @@ def grad_mu_f(var, joint, X, mu):
 
 ### mu (normal), C
 def grad_rootC_f(var, joint, X, sample_xi, sample_mu):
-    C = var.covariances
     D_mu_f = grad_mu_f(var, joint, X, sample_mu)
     D_rootC_mu = sample_xi
     grad_C_f =  D_mu_f * D_rootC_mu
     return np.array([np.diag(grad_C_f[k]) for k in range(var.K)])
+
+
+from scipy.special import logsumexp
+### Calculate IWAE weights
+def calculate_iwae_weights(n_samples, var, joint, X, pi_samples, mu_samples):
+    # evaluate IWAE weights for gradient estimator
+    ln_p_over_q_samples = np.zeros(n_samples)
+    for i in range(n_samples):
+        ln_p_over_q_samples[i] = evaluate_ln_p_over_q(var, joint, X, 
+                                                pi_samples[i], mu_samples[i])
+    ln_weights = ln_p_over_q_samples - logsumexp(ln_p_over_q_samples)
+    print(ln_weights)
+    return np.exp(ln_weights)
+
+#evlauate p/q for the purposes of IWAE weights
+def evaluate_ln_p_over_q(var, joint, X, pi, mu):
+    # ln(p/q) = lnp - lnq
+    lnp = evaluate_cost_SFE(var, joint, X, pi, mu)
+    lnq = ln_q(var, pi, mu)
+    return lnp - lnq
+    
+from calculate_ELBO import E_ln_q_Z
+def ln_q(var, pi, mu):
+    D = mu.shape[1]
+    a = E_ln_q_Z(var.responsibilities)
+    b = ln_C(var.alpha) + np.sum((var.alpha - 1)*np.log(pi))
+    c = 0.
+    for k in range(var.K):
+        v = (mu[k] - var.means[k]).reshape(2,1)
+        c += -0.5 * (multi_dot((v.T, var.precisions[k], v)) + D*np.log(2*np.pi)
+                     + np.log(det(var.covariances[k])))
+    return a + b + float(c)
+
     
     

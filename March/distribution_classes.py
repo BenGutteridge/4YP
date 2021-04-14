@@ -18,6 +18,7 @@ from grad_est_utils import grad_H_q, sample_mu, sample_pi, evaluate_cost_SFE
 from grad_est_utils import grad_ln_q_pi, grad_ln_q_mu
 from grad_est_utils import grad_alpha_f, grad_m_f, grad_rootC_f
 from grad_est_utils import sample_pathwise_mu, sample_pathwise_pi
+from grad_est_utils import calculate_iwae_weights
 
 np.random.seed(42)
 
@@ -235,13 +236,16 @@ class VariationalDistribution:
         
         # Average SGD updates, weight by step size, and add to update variational params 
         d_alpha, d_m, d_C = np.array(d_alpha), np.array(d_m), np.array(d_C)
-        sum_d_alpha = np.sum(d_alpha, axis=0)
-        sum_d_m = np.sum(d_m, axis=0)
-        sum_d_C = np.sum(d_C, axis=0)
-        self.alpha += (1/S) * self.step_sizes['alpha'] * sum_d_alpha
+        E_d_alpha = np.mean(d_alpha, axis=0)
+        E_d_m = np.mean(d_m, axis=0)
+        E_d_C = np.mean(d_C, axis=0)
+        self.Var_E_d_alpha = np.mean((d_alpha - E_d_alpha)**2, axis=0)
+        self.Var_E_d_m = np.mean((d_m - E_d_m)**2, axis=0)
+        self.Var_E_d_C = np.mean((d_C - E_d_C)**2, axis=0)
+        self.alpha += self.step_sizes['alpha'] * E_d_alpha
         self.alpha = np.maximum(self.alpha, self.ALPHA_LB * np.ones(self.K)) # constraints: alpha>0. Setting alpha>.1 as psi'(alpha->0) -> inf
-        self.means += (1/S) * self.step_sizes['m'] * sum_d_m
-        self.covariances += (1/S) * self.step_sizes['C'] * sum_d_C
+        self.means += self.step_sizes['m'] * E_d_m
+        self.covariances += self.step_sizes['C'] * E_d_C
         self.update_precisions_from_covariances()
         
         
@@ -277,28 +281,42 @@ class VariationalDistribution:
         # use same gradient update method as GD
         self._apply_gradient_updates()
         
-    def _M_step_pathwise(self, joint, X, t, n_samples=10):
+    def _M_step_pathwise(self, joint, X, t, n_samples=20, iwae=True):
         K, D = self.K, X.shape[1]
         self.step_sizes = self.gd_schedule(t)
-        sum_grad_alpha_f, sum_grad_m_f, sum_grad_rootC_f = np.zeros(K), np.zeros((K, D)), np.zeros((K,D,D))
+        _grad_alpha_f = np.zeros((n_samples,K))
+        _grad_m_f = np.zeros((n_samples, K, D))
+        _grad_rootC_f = np.zeros((n_samples,K,D,D))
+        pi_samples = np.zeros((n_samples,K)) 
+        mu_samples = np.zeros((n_samples, K, D))
         for i in range(n_samples):
             # sample through paths
             mu_hat, xi_hat = sample_pathwise_mu(self) # get a sample
             pi_hat, z_hat, u_hat = sample_pathwise_pi(self)
+            pi_samples[i], mu_samples[i] = pi_hat, mu_hat
             # evaluate grad f with variational params moved into f
-            sum_grad_alpha_f += grad_alpha_f(self, pi_hat, z_hat, u_hat)
-            sum_grad_m_f += grad_m_f(self, joint, X, mu_hat)
-            sum_grad_rootC_f += grad_rootC_f(self, joint, X, xi_hat, mu_hat)
+            _grad_alpha_f[i] = grad_alpha_f(self, pi_hat, z_hat, u_hat)
+            _grad_m_f[i] = grad_m_f(self, joint, X, mu_hat)
+            _grad_rootC_f[i] = grad_rootC_f(self, joint, X, xi_hat, mu_hat)
+        if iwae == True:
+            self.weights = calculate_iwae_weights(n_samples, self, joint, 
+                                                  X, pi_samples, mu_samples)
+            _grad_alpha_f *= (n_samples * self.weights.reshape(-1,1))
+            _grad_m_f *= (n_samples *self.weights.reshape(-1,1,1))
+            _grad_rootC_f *= (n_samples * self.weights.reshape(-1,1,1,1))
         # average over number of samples
-        self.d_alpha = sum_grad_alpha_f/n_samples
-        self.d_m = sum_grad_m_f/n_samples
+        self.d_alpha = np.mean(_grad_alpha_f, axis=0)
+        self.d_m = np.mean(_grad_m_f, axis=0)
         self.d_C = np.zeros(K)
-        d_rootC = sum_grad_rootC_f/n_samples
+        self.d_rootC = np.mean(_grad_rootC_f, axis=0)
+        self.Var_E_d_alpha = np.mean((self.d_alpha - _grad_alpha_f)**2,axis=0)
+        self.Var_E_d_m = np.mean((self.d_m - _grad_m_f)**2,axis=0)
+        self.Var_E_d_rootC = np.mean((self.d_rootC - _grad_rootC_f)**2,axis=0)
         # use same gradient update method as GD
         self._apply_gradient_updates()
         # need to update rootC separately
         root_C = self.covariances**0.5
-        root_C += d_rootC * self.step_sizes['C']
+        root_C += self.d_rootC * self.step_sizes['C']
         self.covariances = root_C**2
         self.update_precisions_from_covariances()
             

@@ -21,7 +21,7 @@ from distribution_classes import JointDistribution, VariationalDistribution
 from generate_dataset import generate_2D_dataset
 from plot_utils import plot_GMM, E_pi, make_gif, plot_1D_phi as plot_1D_param, plot_K_covs, plot_cov_ellipses_gif
 
-np.random.seed(42)
+np.random.seed(41)
 
 # %% Misc setup
 
@@ -33,8 +33,8 @@ N_its = 20             # Number of iterations of chosen update method performed
 # update_type = 'CAVI'  # Using co-rdinate ascent variational inference algo
 # update_type = 'SGD'
 # update_type = 'SNGD'  # SVI, stochastic natural gradients
-update_type = 'SFE'   # Using regular E-step and score function estimator for phi grads
-# update_type = 'PW'      # Using regular E-step and pathwise grad est
+# update_type = 'SFE'   # Using regular E-step and score function estimator for phi grads
+update_type = 'PW'      # Using regular E-step and pathwise grad est
 
 print('\n%s' % update_type)
 minibatch_size = 20
@@ -132,6 +132,7 @@ for file in os.listdir(filedir):
 plt.close('all')
 ELBOs = np.array([variational_memory[n].ELBO for n in range(1,N_its)])
 alphas = np.array([variational_memory[n].alpha for n in range(N_its)])
+Var_E_d_alphas = np.array([variational_memory[n].Var_E_d_alpha for n in range(1,N_its)])
 mixing_coefficients = np.array([variational_memory[n].mixing_coefficients for n in range(1,N_its)])
 varx = np.array([variational_memory[n].covariances[:,0,0] for n in range(N_its)])
 vary = np.array([variational_memory[n].covariances[:,1,1] for n in range(N_its)])
@@ -139,6 +140,7 @@ covxy = np.array([variational_memory[n].covariances[:,1,0] for n in range(N_its)
 
 plot_1D_param(ELBOs.reshape(-1,1), 'ELBO', 1)
 plot_1D_param(alphas, 'alphas', K)
+plot_1D_param(Var_E_d_alphas, 'Variation of gradient estimates wrt alpha', K)
 # plot_1D_param(mixing_coefficients, 'Mixing coefficients (E[pi_k])', K)
 # plot_K_covs(varx,vary,covxy,K)
 plt.show()
@@ -157,3 +159,5 @@ plt.plot(rho_t)
 plt.xlabel('Iterations')
 plt.title('rho_t, base step size')
 plt.show()
+
+
