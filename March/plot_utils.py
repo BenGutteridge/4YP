@@ -15,8 +15,10 @@ import os
 import datetime
 import matplotlib.pyplot as plt
 from scipy.stats import chi2
-import autograd.numpy as np
-from autograd.numpy.linalg import det, inv
+# import autograd.numpy as np
+# from autograd.numpy.linalg import det, inv
+import numpy as np
+from numpy.linalg import det, inv
 import warnings
 import matplotlib.cbook
 warnings.filterwarnings("ignore",category=matplotlib.cbook.mplDeprecation)
@@ -62,7 +64,7 @@ def E_pi(alpha):
     return alpha/np.sum(alpha)
 
 def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=[-5,10,-5,15], cols=cols):
-    plt.figure()
+    plt.figure(figsize=(4,4))
     if xylims != None:
         plt.xlim(xylims[0],xylims[1])
         plt.ylim(xylims[2],xylims[3])
@@ -99,10 +101,11 @@ def plot_GMM(X, mu, lam, pi, centres, covs, K, title, savefigpath=False, xylims=
             splot.add_artist(true_ell)
     
     plt.title(title)
-    plt.legend(legend)
+    # plt.legend(legend)
     if isinstance(savefigpath, str):
         plt.savefig(savefigpath)
-        plt.close('all')
+        # plt.savefig(savefigpath[:-4]+'.pdf', format='pdf')
+        # plt.close('all')
     else:
         plt.show()
     

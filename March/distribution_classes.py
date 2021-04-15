@@ -20,8 +20,6 @@ from grad_est_utils import grad_alpha_f, grad_m_f, grad_rootC_f
 from grad_est_utils import sample_pathwise_mu, sample_pathwise_pi
 from grad_est_utils import calculate_iwae_weights
 
-np.random.seed(42)
-
 class JointDistribution:
     def __init__(self, alpha, mean, covariance=None, precision=None):
         """
@@ -115,7 +113,7 @@ class VariationalDistribution:
         self.update_precisions_from_covariances()
 
     
-    def calculate_weighted_statistics(self, X):
+    def calculate_weighted_statistics(self, X, samples=None):
         """
         Calculates frequently used statistics of the responsibilities and the
         dataset and sets them as attributes of the distribution class. Roughly
@@ -130,11 +128,13 @@ class VariationalDistribution:
         responsibility-weighted covariance of dataset for each of K components
         """
         r = self.responsibilities
-        
         for k in range(self.K):
             self.NK[k] = N_k(r[:,k])                                # Eqn 10.51
             self.xbar[k] = x_k_bar(self.NK[k], r[:,k], X)           # Eqn 10.52
             self.SK[k] = S_k(self.NK[k], r[:,k], X, self.xbar[k])   # Eqn 10.53
+        if self.update_type == 'SNGD' or self.update_type == 'SGD':
+            N, S = X.shape[0], samples.shape[0]
+            self.NK *= (N/S)
 
     def M_step(self, X, joint, samples=None, t=None):
         """
@@ -153,7 +153,7 @@ class VariationalDistribution:
         elif self.update_type == "SFE":
             self._M_step_SFE(joint, X, t)
         elif self.update_type == "PW":
-            self._M_step_pathwise(joint, X, t)
+            self._M_step_pathwise(joint, X, t, samples)
 
     def _M_step_CAVI(self, X, joint):
         """CAVI updates. Modified from Bishop Eqns 10.58-62"""
@@ -266,7 +266,7 @@ class VariationalDistribution:
             # 'black box' cost function
             f = float(evaluate_cost_SFE(self, joint, X, pi_hat, mu_hat))/X.shape[0]
             avg_f = np.mean((f, avg_f))
-            print('f: ', f, 'avg_f: ', avg_f)
+            # print('f: ', f, 'avg_f: ', avg_f)
             # gradients of log measure for score function
             grad_alpha_ln_q = grad_ln_q_pi(self, pi_hat)
             grad_m_ln_q, grad_C_ln_q = grad_ln_q_mu(self, mu_hat)
@@ -281,7 +281,7 @@ class VariationalDistribution:
         # use same gradient update method as GD
         self._apply_gradient_updates()
         
-    def _M_step_pathwise(self, joint, X, t, n_samples=1, iwae=False):
+    def _M_step_pathwise(self, joint, X, t, n_samples, iwae=True):
         K, D = self.K, X.shape[1]
         self.step_sizes = self.gd_schedule(t)
         _grad_alpha_f = np.zeros((n_samples,K))
@@ -301,6 +301,7 @@ class VariationalDistribution:
         if iwae == True:
             self.weights = calculate_iwae_weights(n_samples, self, joint, 
                                                   X, pi_samples, mu_samples)
+            print(self.weights)
             _grad_alpha_f *= (n_samples * self.weights.reshape(-1,1))
             _grad_m_f *= (n_samples *self.weights.reshape(-1,1,1))
             _grad_rootC_f *= (n_samples * self.weights.reshape(-1,1,1,1))

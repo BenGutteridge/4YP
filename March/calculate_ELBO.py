@@ -13,6 +13,7 @@ import numpy as np
 from numpy.linalg import inv, det, multi_dot
 from scipy.special import gammaln
 from calculate_responsibilities import E_N_exp_k, E_ln_pi_k
+from copy import copy
 
 def E_ln_p_X_given_Z_mu(m, invSig, C0, NK, xbar, SK, D=2):
     # needs checking - two Traces?
@@ -102,3 +103,21 @@ def calculate_ELBO(r, alpha, m, C, invSig, alpha0, m0, C0, NK, xbar, SK):
       q2 = E_ln_q_pi(alpha)
       q3 = E_ln_q_mu(C, D=2)    
       return p1+p2+p3+p4-q1-q2-q3
+  
+def calculate_ELBO_variance(var, alpha0, m0, C0, samples, X):
+    # calculate the variance of the ELBO estimate calculated using minibatches
+    alpha, m, C, invSig = var.alpha, var.means, var.covariances, var.inv_sigma
+    r = var.responsibilities
+    N, K = X.shape[0], alpha.shape[0]
+    empty_r, j = np.zeros((N,K)), 0
+    ELBOs = np.zeros(len(samples))
+    for i in samples:
+        r_i = copy(empty_r)
+        r_i[:,:] = r[i]
+        ELBOs[j] = calculate_ELBO(r_i, alpha, m, C, invSig, alpha0, m0, 
+                                  C0, N*r[i], xbar=X[i]*np.ones((K,2)), SK=np.zeros((K,2,2)))
+        E_ELBO = np.mean(ELBOs)
+        Var_ELBO = np.mean((ELBOs - E_ELBO)**2)
+        j += 1
+    return E_ELBO, Var_ELBO
+    

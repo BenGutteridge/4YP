@@ -181,7 +181,7 @@ def calculate_iwae_weights(n_samples, var, joint, X, pi_samples, mu_samples):
         ln_p_over_q_samples[i] = evaluate_ln_p_over_q(var, joint, X, 
                                                 pi_samples[i], mu_samples[i])
     ln_weights = ln_p_over_q_samples - logsumexp(ln_p_over_q_samples)
-    print(ln_weights)
+    # print(ln_weights)
     return np.exp(ln_weights)
 
 #evlauate p/q for the purposes of IWAE weights

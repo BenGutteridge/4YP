@@ -4,12 +4,12 @@ Created on Fri Mar 12 09:15:12 2021
 
 @author: benpg
 """
-from scipy.special import polygamma as psi_prime
+from scipy.special import digamma, polygamma as psi_prime
 import numpy as np
 from numpy.linalg import inv, det, multi_dot
-import autograd.numpy as anp
-from autograd.scipy.special import digamma
-from autograd import grad
+# import autograd.numpy as anp
+# from autograd.scipy.special import digamma
+# from autograd import grad
 
 def L_grad_alpha(alpha0, alpha, NK):
     K = alpha.shape[0]

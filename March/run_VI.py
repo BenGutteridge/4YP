@@ -27,9 +27,11 @@ import pickle
 import time
 from log_likelihood import log_likelihood
 
+minibatch_scheme = np.array([1,5,10,35,100])
+sampling_scheme = np.array([5, 10, 20, 100])
+# step_size_scales = [10]
 
-
-for i in range(1):
+for j in range(len(sampling_scheme)):
     seed = np.random.randint(100)
     np.random.seed(seed)
     
@@ -43,6 +45,7 @@ for i in range(1):
     # update_type = 'SNGD'  # SVI, stochastic natural gradients
     # update_type = 'SFE'   # Using regular E-step and score function estimator for phi grads
     # update_type = 'PW'      # Using regular E-step and pathwise grad est
+
     
     root = r"C:\Users\benpg\Documents\4YP\Running_experiments"
     run_dir = join(root, str(datetime.datetime.now())[:-7].replace(':',';') + 
@@ -60,15 +63,15 @@ for i in range(1):
     # %% Misc setup
     
     "Iterations and update_type"
-    K = 9                   # Initial number of mixture components
-    N_its = 5             # Number of iterations of chosen update method performed
+    K = 10                   # Initial number of mixture components
+    N_its = 32             # Number of iterations of chosen update method performed
     
     
     print('\n%s' % update_type)
-    minibatch_size = 20
+    minibatch_size = minibatch_scheme[j]
     
     "Define parameters of joint distribution (effectively priors on variational params)"
-    alpha_0 = 1e-3      # Dirichlet prior p(pi) = Dir(pi|alpha0)
+    alpha_0 = 1e-3       # Dirichlet prior p(pi) = Dir(pi|alpha0)
     m_0 = np.zeros(2)   # Gaussian prior p(mu) = N(mu|m0, C0)
     C_0 = np.eye(2)     # Covariance of prior mu
     inv_sigma = np.eye(2)   # Fixed covariance/precision of Gaussian components 
@@ -76,7 +79,7 @@ for i in range(1):
     
     
     "Generating dataset"
-    N = 500
+    N = 700
     num_clusters = 7
     centres = np.array([[6,3], [3,6], [12,15], [9,6], [3,14], [9,11], [13,1]])
     covs = np.array([np.eye(2) for _ in range(num_clusters)])
@@ -106,14 +109,15 @@ for i in range(1):
         if t is None: return step_sizes
         else:    
             # rho_t = scale*(t + delay)**(-forgetting) # Eq 26, Hoffman SVI
-            # rho_t = scale*np.exp(-0.05*t)   # off the top of my head
-            rho_t = 1                       # constant step size
+            rho_t = scale*np.exp(-0.01*t)   # off the top of my head
+            # rho_t = 1                       # constant step size
             # decay, A = 1, 0               # A is stability constant >= 0
             # rho_t = scale/(t+1+A)**decay  # See Spall 4.14
             steps= {}
             for key in step_sizes:
                 if update_type == 'SNGD':
                     steps[key] = 1*rho_t
+                    # steps[key] = step_sizes[key] * rho_t 
                 else:
                     steps[key] = step_sizes[key] * rho_t 
             return steps
@@ -122,6 +126,7 @@ for i in range(1):
     # TODO: could we move this into VariationalDistribution? Should we avoid dependence on N?
     
     initial_responsibilities = np.random.dirichlet(np.ones(K), N)
+    samples = np.random.choice(N, size=minibatch_size, replace=False)
     
     variational = VariationalDistribution(initial_responsibilities, 
                                           inv_sigma, update_type, gd_schedule)
@@ -134,19 +139,22 @@ for i in range(1):
     "Repeat Maximisation and Expectation steps for N_its iterations, maximising ELBO"
     t_start, t_end = np.zeros(N_its), np.zeros(N_its)
     for i in tqdm(range(N_its)):
-        variational.calculate_weighted_statistics(X)
+        variational.calculate_weighted_statistics(X, samples)
         variational.calculate_ELBO(joint)
         print(variational.ELBO)
         # stop if ELBO suddenly goes nuts
         if i > 15:
-            if abs(variational.ELBO) > abs(variational_memory[-10].ELBO):
+            if abs(variational.ELBO) > 10*abs(variational_memory[-10].ELBO):
                 print('ELBO gone catastrophically large, ELBO = ', variational.ELBO)
                 N_its = i
                 break
         # Plotting stuff
-        title = '%s: Iteration %d -- ELBO = %7.0f'%(variational.update_type, i, variational.ELBO)
+        # title = '%s: Iteration %d -- ELBO = %7.0f'%(variational.update_type, i, variational.ELBO)
+        title = '%s: Iteration %d' % (variational.update_type, i)
         if update_type == 'SGD' or update_type == 'SNGD':
             title = 'Minibatch: %d, ' % minibatch_size + title
+        if update_type == 'PW':
+            title = '%d sample, ' % sampling_scheme[j] + title
         filename = join(gifplots_dir, 'img%04d.png'%i)
         variational.calculate_mixing_coefficients()
         plot_GMM(X, variational.means, K_inv_sigma, variational.mixing_coefficients, centres, covs, K, title, savefigpath=filename, xylims=None)
@@ -156,11 +164,12 @@ for i in range(1):
         # Save copy of class with all current params for plotting etc
         variational_memory.append(deepcopy(variational))
         samples = np.random.choice(N, size=minibatch_size, replace=False)
+        variational.samples = samples
      
         # # EM steps, calculate ELBO
         t_start[i] = time.time()
         variational.E_step(X, samples)
-        variational.M_step(X, joint, samples, t=i)
+        variational.M_step(X, joint, samples=sampling_scheme[j], t=i)
         t_end[i] = time.time()
 
     t_fin = time.time()
