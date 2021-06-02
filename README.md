@@ -1,6 +1,6 @@
 # Fourth Year Project
 ## Investigating gradient descent in variational inference
-Repo for experiment code from project investigating single sample gradient estimation in variational inference.
+Repo for experiment code from project investigating single sample gradient estimation in variational inference. Up to date code is in `March` directory.
 
 #### Abstract
 The aim of many machine learning applications is the modelling of data. We may wish to perform
