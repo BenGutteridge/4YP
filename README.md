@@ -1,4 +1,5 @@
-# Fourth Year Project: Investigating gradient descent in variational inference
+# Fourth Year Project
+## Investigating gradient descent in variational inference
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
 
 #### Abstract
