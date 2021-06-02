@@ -1,17 +1,25 @@
 # 4YP
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
 
+
+### Coordinate ascent VI
 ![alt text](GMM/figs/cavi.gif)
 
+### Pathwise estimator
+Using 10 samples per iteration
 ![alt text](GMM/figs/pw.gif)
 
+### Gradient descent
 ![alt text](GMM/figs/gd.gif)
 
+### SGD
 ![alt text](GMM/figs/sgd.gif)
 
+### Stochastic natural gradient descent
+Using minibatch size of 35
 ![alt text](GMM/figs/sngd.gif)
 
-
+<!---
 ### 9/3/2021
 Most up to date, useful code in March directory.
 
@@ -41,3 +49,4 @@ N.b. The above notebook requires `MM_var_inf_Bishop/utils.py`
 
 VAE Colab notebook from earlier is here:
 https://colab.research.google.com/drive/163uMDyCo96dIqItTlN9gW2oGa2zrDOyp?usp=sharing
+-->
