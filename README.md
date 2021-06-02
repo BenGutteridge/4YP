@@ -1,7 +1,7 @@
 # Fourth Year Project: Investigating gradient descent in variational inference
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
 
-Abstract:
+#### Abstract
 The aim of many machine learning applications is the modelling of data. We may wish to perform
 classification of images, clustering of users by preference for recommender systems, or regression
 for predicting financial markets; for all of these and limitless other applications, our goal is to learn a
@@ -31,12 +31,13 @@ convergence rates. We also consider Bayesian quadrature (probabilistic numerical
 its current applications to VI and possible novel uses, though experimentation in this area was
 unfortunately limited due to time constraints and negative results.
 
+## GIFS
+Runs used in experiments section of report. Details of individual runs are in report.
 
 ### Coordinate ascent VI
 ![alt text](GMM/figs/cavi.gif)
 
 ### Pathwise estimator
-Using 10 samples per iteration
 ![alt text](GMM/figs/pw.gif)
 
 ### Gradient descent
@@ -46,7 +47,6 @@ Using 10 samples per iteration
 ![alt text](GMM/figs/sgd.gif)
 
 ### Stochastic natural gradient descent
-Using minibatch size of 35
 ![alt text](GMM/figs/sngd.gif)
 
 <!---
