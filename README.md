@@ -11,6 +11,8 @@ Repo for experiment code from project investigating single sample gradient estim
 
 ![alt text](GMM/figs/2021-04-15 17;28;10__SNGD.gif)
 
+![alt text](GMM/figs/GMM_components.gif)
+
 
 ### 9/3/2021
 Most up to date, useful code in March directory.
