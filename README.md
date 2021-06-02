@@ -1,17 +1,15 @@
 # 4YP
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
 
-![alt text](GMM/figs/cavi_gif.gif)
+![alt text](GMM/figs/cavi.gif)
 
-![alt text](GMM/figs/2021-04-15 12;31;59__PW.gif)
+![alt text](GMM/figs/pw.gif)
 
-![alt text](GMM/figs/2021-04-15 13;32;25__GD.gif)
+![alt text](GMM/figs/gd.gif)
 
-![alt text](GMM/figs/2021-04-15 16;47;27__SGD.gif)
+![alt text](GMM/figs/sgd.gif)
 
-![alt text](GMM/figs/2021-04-15 17;28;10__SNGD.gif)
-
-![alt text](GMM/figs/GMM_components.gif)
+![alt text](GMM/figs/sngd.gif)
 
 
 ### 9/3/2021
