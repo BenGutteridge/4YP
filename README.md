@@ -1,5 +1,35 @@
-# 4YP
+# Fourth Year Project: Investigating gradient descent in variational inference
 Repo for experiment code from project investigating single sample gradient estimation in variational inference.
+
+Abstract:
+The aim of many machine learning applications is the modelling of data. We may wish to perform
+classification of images, clustering of users by preference for recommender systems, or regression
+for predicting financial markets; for all of these and limitless other applications, our goal is to learn a
+model from some given data. In some cases, we are content with so-called ‘discriminative’ models,
+those where we care only about learning the predictor function of interest. Generally though, the
+aim is to learn the true underlying model, the system that generated our data and that describes
+a real-world process or phenomenon. These are ‘generative’ models, as they not only allow us
+to learn systems and make predictions, but also to generate synthetic data similar to that upon
+which it was trained (Jebara 2012). We obtain such a generative model by performing Bayesian
+posterior inference: choose a distributional family to model the data, and learn the distribution of
+model parameters conditioned on that data.
+The difficulty in practical inference applications is that in all but the most simple cases, we
+must solve an intractable integral. If we cannot evaluate the posterior analytically, we must resort
+to approximation, which can be broadly divided into two categories: stochastic methods such as
+Monte Carlo, which guarantee convergence but are often slow and inefficient, and deterministic
+methods (Bishop 2006). This report focuses on the deterministic approach, also called variational
+inference (VI; Jordan et al. 1998; Wainwright and Jordan 2007), which frames posterior inference
+as an optimisation problem, and often approximates the posterior much more quickly and efficiently
+than by random sampling methods.
+As an optimisation problem, we can approach VI with specialised algorithms such as coordinate
+ascent variational inference (Bishop 2006), or general-purpose algorithms like stochastic gradient
+descent (Robbins and Monro 1951) – in either case, we will find gradients, their calculation and
+estimation, at the centre of the method.
+In this report we provide a review of VI, with a particular focus on gradient descent algorithms,
+estimating accurate gradients, and how this affects the accuracy of posterior approximation and
+convergence rates. We also consider Bayesian quadrature (probabilistic numerical integration),
+its current applications to VI and possible novel uses, though experimentation in this area was
+unfortunately limited due to time constraints and negative results.
 
 
 ### Coordinate ascent VI
